@@ -1,41 +1,84 @@
+using Deuna.Delivery.Service.Models;
+using FluentValidation;
+using MassTransit;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Serilog;
+using StackExchange.Redis;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .Enrich.FromLogContext()
+    .WriteTo.Console());
+
+Log.Information("Starting Deuna Delivery Service");
+
 builder.Services.AddOpenApi();
+
+builder.Services.AddDbContext<DeliveryDbContext>(options =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? "Host=localhost;Port=5434;Database=deuna_delivery;Username=deuna_user;Password=deuna_dev_2026";
+    options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsAssembly("Deuna.Delivery.Service"));
+});
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+{
+    var configuration = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
+    return ConnectionMultiplexer.Connect(configuration);
+});
+
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        var host = builder.Configuration["RabbitMQ:Host"] ?? "localhost";
+        var port = builder.Configuration.GetValue<int>("RabbitMQ:Port", 5672);
+        var username = builder.Configuration["RabbitMQ:Username"] ?? "deuna";
+        var password = builder.Configuration["RabbitMQ:Password"] ?? "rabbitmq_dev_2026";
+        var vhost = builder.Configuration["RabbitMQ:VirtualHost"] ?? "deuna";
+
+        var uri = new Uri($"amqp://{username}:{password}@{host}:{port}/{vhost}");
+        cfg.Host(uri);
+
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:rabbitmq_dev_2026@localhost:5672/deuna";
+var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<DeliveryDbContext>()
+    .AddRedis(redisConnectionString: redisConn)
+    .AddRabbitMQ(rabbitConnectionString: rabbitConn);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
+app.UseSerilogRequestLogging();
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+app.MapHealthChecks("/health");
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.MapGet("/api/delivery/health", () => Results.Ok(new { status = "healthy", service = "delivery", timestamp = DateTime.UtcNow }))
+    .WithName("DeliveryHealthCheck")
+    .AllowAnonymous();
 
-app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
+using (var scope = app.Services.CreateScope())
 {
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    var db = scope.ServiceProvider.GetRequiredService<DeliveryDbContext>();
+    await db.Database.MigrateAsync();
 }
+
+Log.Information("Deuna Delivery Service started successfully");
+await app.RunAsync();
+
+public partial class Program { }
