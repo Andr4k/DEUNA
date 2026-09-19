@@ -1,11 +1,10 @@
 using BCrypt.Net;
 using Deuna.Identity.Service.Models;
+using Deuna.Shared.Extensions;
 using FluentValidation;
 using MassTransit;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System.Text;
 
@@ -44,30 +43,12 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        var key = builder.Configuration["Jwt:SecretKey"] ?? "your-super-secret-key-at-least-32-characters-long";
-        var issuer = builder.Configuration["Jwt:Issuer"] ?? "deuna-api";
-        var audience = builder.Configuration["Jwt:Audience"] ?? "deuna-clients";
-
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = issuer,
-            ValidAudience = audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
-        };
-    });
-
-builder.Services.AddAuthorization();
+// Use shared JWT authentication
+builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:rabbitmq_dev_2026@localhost:5672/deuna";
+var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<IdentityDbContext>()
     .AddRabbitMQ(rabbitConnectionString: rabbitConn);
@@ -83,6 +64,9 @@ app.UseSerilogRequestLogging();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Use shared JWT middleware (after UseAuthentication/UseAuthorization)
+app.UseDeunaJwtMiddleware();
 
 app.MapHealthChecks("/health");
 
