@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Deuna.Delivery.Service/Deuna.Delivery.Service.csproj" />
+  <Project Path="Deuna.Feedback.Service/Deuna.Feedback.Service.csproj" />
+  <Project Path="Deuna.Identity.Service/Deuna.Identity.Service.csproj" />
+  <Project Path="Deuna.Orders.Service/Deuna.Orders.Service.csproj" />
+</Solution>

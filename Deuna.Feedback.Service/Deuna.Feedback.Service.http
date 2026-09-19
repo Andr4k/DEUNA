@@ -1,0 +1,6 @@
+@Deuna.Feedback.Service_HostAddress = http://localhost:5193
+
+GET {{Deuna.Feedback.Service_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
