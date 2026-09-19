@@ -4,4 +4,6 @@
   <Project Path="Deuna.Gateway/Deuna.Gateway.csproj" />
   <Project Path="Deuna.Identity.Service/Deuna.Identity.Service.csproj" />
   <Project Path="Deuna.Orders.Service/Deuna.Orders.Service.csproj" />
+  <Project Path="Deuna.Shared.Tests/Deuna.Shared.Tests.csproj" />
+  <Project Path="Deuna.Shared/Deuna.Shared.csproj" />
 </Solution>

@@ -1,8 +1,6 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Deuna.Shared.Extensions;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.Tokens;
 using Serilog;
-using System.Text;
 using System.Threading.RateLimiting;
 using Yarp.ReverseProxy.Transforms;
 
@@ -28,34 +26,8 @@ builder.Services.AddReverseProxy()
         });
     });
 
-// JWT Authentication
-var jwtKey = builder.Configuration["Jwt:SecretKey"] ?? "your-super-secret-key-at-least-32-characters-long";
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "deuna-api";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "deuna-clients";
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-            ClockSkew = TimeSpan.Zero
-        };
-    });
-
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("authenticated", policy => policy.RequireAuthenticatedUser());
-    options.AddPolicy("restaurant", policy => policy.RequireRole("RESTAURANT"));
-    options.AddPolicy("rider", policy => policy.RequireRole("RIDER"));
-    options.AddPolicy("admin", policy => policy.RequireRole("ADMIN"));
-});
+// Use shared JWT authentication
+builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 
 // Rate Limiting: 100 requests/minute per IP
 builder.Services.AddRateLimiter(options =>
@@ -103,6 +75,9 @@ app.UseCors("frontend");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Use shared JWT middleware (after UseAuthentication/UseAuthorization)
+app.UseDeunaJwtMiddleware();
 
 app.MapHealthChecks("/health");
 
