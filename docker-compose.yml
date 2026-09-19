@@ -1,0 +1,148 @@
+version: '3.9'
+
+services:
+  # PostgreSQL para Identity Service
+  postgres-identity:
+    image: postgres:16-alpine
+    container_name: deuna-postgres-identity
+    environment:
+      POSTGRES_DB: deuna_identity
+      POSTGRES_USER: deuna_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-identity-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deuna_user -d deuna_identity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - deuna-network
+
+  # PostgreSQL con PostGIS para Orders Service
+  postgres-orders:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: deuna-postgres-orders
+    environment:
+      POSTGRES_DB: deuna_orders
+      POSTGRES_USER: deuna_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-orders-data:/var/lib/postgresql/data
+      - ./scripts/init-postgis.sql:/docker-entrypoint-initdb.d/init-postgis.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deuna_user -d deuna_orders"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - deuna-network
+
+  # PostgreSQL para Delivery Service
+  postgres-delivery:
+    image: postgres:16-alpine
+    container_name: deuna-postgres-delivery
+    environment:
+      POSTGRES_DB: deuna_delivery
+      POSTGRES_USER: deuna_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-delivery-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deuna_user -d deuna_delivery"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - deuna-network
+
+  # PostgreSQL para Feedback Service
+  postgres-feedback:
+    image: postgres:16-alpine
+    container_name: deuna-postgres-feedback
+    environment:
+      POSTGRES_DB: deuna_feedback
+      POSTGRES_USER: deuna_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-feedback-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deuna_user -d deuna_feedback"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - deuna-network
+
+  # Redis para tracking GPS y cache
+  redis:
+    image: redis:7-alpine
+    container_name: deuna-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - deuna-network
+
+  # RabbitMQ para mensajería asíncrona
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: deuna-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_VHOST: deuna
+    ports:
+      - "5672:5672"   # AMQP protocol
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - rabbitmq-log:/var/log/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - deuna-network
+
+volumes:
+  postgres-identity-data:
+    driver: local
+  postgres-orders-data:
+    driver: local
+  postgres-delivery-data:
+    driver: local
+  postgres-feedback-data:
+    driver: local
+  redis-data:
+    driver: local
+  rabbitmq-data:
+    driver: local
+  rabbitmq-log:
+    driver: local
+
+networks:
+  deuna-network:
+    driver: bridge
