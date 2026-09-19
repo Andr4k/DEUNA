@@ -1,0 +1,6 @@
+@Deuna.Gateway_HostAddress = http://localhost:5254
+
+GET {{Deuna.Gateway_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
