@@ -1,12 +1,13 @@
 using BCrypt.Net;
+using Deuna.Identity.Service.Endpoints;
 using Deuna.Identity.Service.Models;
+using Deuna.Identity.Service.Services;
 using Deuna.Shared.Extensions;
 using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,6 +47,10 @@ builder.Services.AddMassTransit(x =>
 // Use shared JWT authentication
 builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 
+// Register Auth Service
+builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Register Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
@@ -73,6 +78,9 @@ app.MapHealthChecks("/health");
 app.MapGet("/api/identity/health", () => Results.Ok(new { status = "healthy", service = "identity", timestamp = DateTime.UtcNow }))
     .WithName("IdentityHealthCheck")
     .AllowAnonymous();
+
+// Map Auth Endpoints
+app.MapAuthEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {
