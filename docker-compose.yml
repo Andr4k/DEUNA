@@ -1,6 +1,7 @@
 version: '3.9'
 
 services:
+  # ========== INFRAESTRUCTURA ==========
   # PostgreSQL para Identity Service
   postgres-identity:
     image: postgres:16-alpine
@@ -8,11 +9,12 @@ services:
     environment:
       POSTGRES_DB: deuna_identity
       POSTGRES_USER: deuna_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deuna_dev_2026}
     ports:
       - "5432:5432"
     volumes:
       - postgres-identity-data:/var/lib/postgresql/data
+      - ./scripts/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U deuna_user -d deuna_identity"]
       interval: 10s
@@ -29,7 +31,7 @@ services:
     environment:
       POSTGRES_DB: deuna_orders
       POSTGRES_USER: deuna_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deuna_dev_2026}
     ports:
       - "5433:5432"
     volumes:
@@ -51,7 +53,7 @@ services:
     environment:
       POSTGRES_DB: deuna_delivery
       POSTGRES_USER: deuna_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deuna_dev_2026}
     ports:
       - "5434:5432"
     volumes:
@@ -72,7 +74,7 @@ services:
     environment:
       POSTGRES_DB: deuna_feedback
       POSTGRES_USER: deuna_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deuna_dev_2026}
     ports:
       - "5435:5432"
     volumes:
@@ -90,7 +92,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: deuna-redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_dev_2026}
     ports:
       - "6379:6379"
     volumes:
@@ -106,11 +108,11 @@ services:
 
   # RabbitMQ para mensajería asíncrona
   rabbitmq:
-    image: rabbitmq:3.12-management-alpine
+    image: rabbitmq:3.13-management-alpine
     container_name: deuna-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-deuna}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbitmq_dev_2026}
       RABBITMQ_DEFAULT_VHOST: deuna
     ports:
       - "5672:5672"   # AMQP protocol
@@ -119,13 +121,157 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
       - rabbitmq-log:/var/log/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 40s
     networks:
       - deuna-network
+
+  # ========== MICROSERVICIOS ==========
+  gateway:
+    build:
+      context: .
+      dockerfile: Deuna.Gateway/Dockerfile
+    container_name: deuna-gateway
+    ports:
+      - "5000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres-identity;Port=5432;Database=deuna_identity;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: ${RABBITMQ_USER:-deuna}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq_dev_2026}
+      RabbitMQ__VirtualHost: deuna
+      Jwt__SecretKey: "DeunaSuperSecretKey2026!@#$%^&*()_+-=[]{}|;:,.<>?"
+      Jwt__Issuer: "Deuna.Identity"
+      Jwt__Audience: "Deuna.Api"
+      Yarp__Clusters__identity__Destination__Address: "http://identity:8080"
+      Yarp__Clusters__orders__Destination__Address: "http://orders:8080"
+      Yarp__Clusters__delivery__Destination__Address: "http://delivery:8080"
+      Yarp__Clusters__feedback__Destination__Address: "http://feedback:8080"
+    depends_on:
+      postgres-identity:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      identity:
+        condition: service_started
+    networks:
+      - deuna-network
+    restart: unless-stopped
+
+  identity:
+    build:
+      context: .
+      dockerfile: Deuna.Identity.Service/Dockerfile
+    container_name: deuna-identity
+    ports:
+      - "5001:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres-identity;Port=5432;Database=deuna_identity;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: ${RABBITMQ_USER:-deuna}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq_dev_2026}
+      RabbitMQ__VirtualHost: deuna
+      Jwt__SecretKey: "DeunaSuperSecretKey2026!@#$%^&*()_+-=[]{}|;:,.<>?"
+      Jwt__Issuer: "Deuna.Identity"
+      Jwt__Audience: "Deuna.Api"
+    depends_on:
+      postgres-identity:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - deuna-network
+    restart: unless-stopped
+
+  orders:
+    build:
+      context: .
+      dockerfile: Deuna.Orders.Service/Dockerfile
+    container_name: deuna-orders
+    ports:
+      - "5002:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres-orders;Port=5432;Database=deuna_orders;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: ${RABBITMQ_USER:-deuna}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq_dev_2026}
+      RabbitMQ__VirtualHost: deuna
+    depends_on:
+      postgres-orders:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+    networks:
+      - deuna-network
+    restart: unless-stopped
+
+  delivery:
+    build:
+      context: .
+      dockerfile: Deuna.Delivery.Service/Dockerfile
+    container_name: deuna-delivery
+    ports:
+      - "5003:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres-delivery;Port=5432;Database=deuna_delivery;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: ${RABBITMQ_USER:-deuna}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq_dev_2026}
+      RabbitMQ__VirtualHost: deuna
+    depends_on:
+      postgres-delivery:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+    networks:
+      - deuna-network
+    restart: unless-stopped
+
+  feedback:
+    build:
+      context: .
+      dockerfile: Deuna.Feedback.Service/Dockerfile
+    container_name: deuna-feedback
+    ports:
+      - "5004:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres-feedback;Port=5432;Database=deuna_feedback;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: ${RABBITMQ_USER:-deuna}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq_dev_2026}
+      RabbitMQ__VirtualHost: deuna
+    depends_on:
+      postgres-feedback:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+    networks:
+      - deuna-network
+    restart: unless-stopped
 
 volumes:
   postgres-identity-data:
