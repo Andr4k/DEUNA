@@ -21,7 +21,8 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 
 Log.Information("Starting Deuna Identity Service");
 
-builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<IdentityDbContext>(options =>
 {
@@ -74,6 +75,9 @@ builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 // Register Auth Service
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+// Register Event Publisher
+builder.Services.AddScoped<IEventPublisher, EventPublisher>();
+
 // Register Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
@@ -86,11 +90,7 @@ builder.Services.AddHealthChecks()
 if (!useInMemory)
 {
     builder.Services.AddHealthChecks()
-        .AddRabbitMQ(sp => 
-        {
-            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = new Uri(rabbitConn) };
-            return factory.CreateConnectionAsync().GetAwaiter().GetResult();
-        });
+        .AddRabbitMQ(rabbitConn, name: "rabbitmq");
 }
 
 // Rate limiting: 5 requests per minute per IP for login (always register services, disable in test)
@@ -112,7 +112,8 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseSerilogRequestLogging();

@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using BCrypt.Net;
 using Deuna.Identity.Service.DTOs;
+using Deuna.Identity.Service.Events;
 using Deuna.Identity.Service.Models;
 using Deuna.Identity.Service.Models.Domain;
 using Deuna.Shared.Extensions;
@@ -34,12 +35,14 @@ public class AuthService : IAuthService
     private readonly IdentityDbContext _db;
     private readonly IConfiguration _config;
     private readonly ILogger<AuthService> _logger;
+    private readonly IEventPublisher _eventPublisher;
 
-    public AuthService(IdentityDbContext db, IConfiguration config, ILogger<AuthService> logger)
+    public AuthService(IdentityDbContext db, IConfiguration config, ILogger<AuthService> logger, IEventPublisher eventPublisher)
     {
         _db = db;
         _config = config;
         _logger = logger;
+        _eventPublisher = eventPublisher;
     }
 
     public async Task<AuthResponse> RegisterRestaurantAsync(RegisterRestaurantRequest request)
@@ -95,6 +98,17 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync();
 
         _logger.LogInformation("Restaurante registrado: {Email}", request.Email);
+
+        // Publish UsuarioRegistrado event
+        var evento = new UsuarioRegistrado(
+            UsuarioId: user.Id,
+            Rol: "Restaurant",
+            Email: user.Email,
+            Telefono: user.PhoneNumber,
+            Activo: user.IsActive,
+            OccurredAt: DateTime.UtcNow
+        );
+        await _eventPublisher.PublishUsuarioRegistradoAsync(evento);
 
         return new AuthResponse(true, "Registro exitoso. Verifique su email.", new
         {
@@ -159,6 +173,17 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync();
 
         _logger.LogInformation("Repartidor registrado: {Email}", request.Email);
+
+        // Publish UsuarioRegistrado event
+        var eventoRider = new UsuarioRegistrado(
+            UsuarioId: user.Id,
+            Rol: "Courier",
+            Email: user.Email,
+            Telefono: user.PhoneNumber,
+            Activo: user.IsActive,
+            OccurredAt: DateTime.UtcNow
+        );
+        await _eventPublisher.PublishUsuarioRegistradoAsync(eventoRider);
 
         return new AuthResponse(true, "Registro exitoso. Verifique su email.", new
         {
@@ -249,6 +274,17 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync();
 
         _logger.LogInformation("Usuario registrado: {Email} con rol {Role}", request.Email, request.Role);
+
+        // Publish UsuarioRegistrado event
+        var eventoRegister = new UsuarioRegistrado(
+            UsuarioId: user.Id,
+            Rol: request.Role,
+            Email: user.Email,
+            Telefono: user.PhoneNumber,
+            Activo: user.IsActive,
+            OccurredAt: DateTime.UtcNow
+        );
+        await _eventPublisher.PublishUsuarioRegistradoAsync(eventoRegister);
 
         return new AuthResponse(true, "Registro exitoso. Verifique su email.", new
         {
