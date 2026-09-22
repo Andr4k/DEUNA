@@ -1,7 +1,9 @@
-# Plan de implementación coordinada
+# Plan de implementación coordinada (reemplazado)
 
 Fecha: 2026-09-22  
 Estado: preparado; ejecución detenida a la espera de aprobación
+
+> Este plan secuencial fue reemplazado el 2026-09-22 por el índice de tareas backend independientes: [BACKEND_WORKFLOW_INDEX.md](BACKEND_WORKFLOW_INDEX.md). Las fases de frontend quedan fuera de este ciclo.
 
 ## Punto de partida
 

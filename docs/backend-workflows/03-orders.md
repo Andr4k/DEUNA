@@ -1,0 +1,3 @@
+# BACKEND-201 — Orders P1 completo
+
+Parte de `main`. Implementa verticalmente `POST /api/v1/orders`: entidades `Pedido`, destino `Point geography(4326)`, contactos, tarifas y `RestauranteReplicado`; `OrdersDbContext`, extensión PostGIS, GiST y migración. Incluye validator, radio de cobertura, distancia/tarifa, QR UUID, código `PED-`, transacción, auth `RESTAURANT`, HTTP example y `PedidoCreado` v1. Si Identity/Delivery faltan, siembra la réplica y prueba publicación con TestHarness; nunca llames sus bases. Aceptación: 201 persistiendo maestro y subtablas, 400 sin mutación para inválidos/fuera de radio, evento único y pruebas PostgreSQL/PostGIS.
