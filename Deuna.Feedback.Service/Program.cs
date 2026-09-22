@@ -3,6 +3,7 @@ using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using RabbitMQ.Client;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -71,10 +72,14 @@ await app.RunAsync();
 
 static void ConfigureHealthChecks(IServiceCollection services, IConfiguration configuration)
 {
-    var rabbitConn = configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:rabbitmq_dev_2026@localhost:5672/deuna";
+    var rabbitConn = configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
     services.AddHealthChecks()
         .AddDbContextCheck<FeedbackDbContext>()
-        .AddRabbitMQ(rabbitConnectionString: rabbitConn);
+        .AddRabbitMQ(sp => 
+        {
+            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = new Uri(rabbitConn) };
+            return factory.CreateConnectionAsync().GetAwaiter().GetResult();
+        });
 }
 
 public partial class Program { }

@@ -19,14 +19,29 @@ public class PerfilRestaurante
     [MaxLength(200)]
     public string NombreComercial { get; set; } = string.Empty;
 
+    [Required]
     [MaxLength(200)]
-    public string? RazonSocial { get; set; }
+    public string RazonSocial { get; set; } = string.Empty;
 
-    [MaxLength(20)]
-    public string? Ruc { get; set; }
+    [Required]
+    [MaxLength(50)]
+    public string Nit { get; set; } = string.Empty;
 
+    [Required]
     [MaxLength(500)]
-    public string? Direccion { get; set; }
+    public string DireccionSede { get; set; } = string.Empty;
+
+    [Required]
+    [MaxLength(100)]
+    public string Ciudad { get; set; } = string.Empty;
+
+    [Required]
+    [Column(TypeName = "decimal(10,8)")]
+    public decimal Latitud { get; set; }
+
+    [Required]
+    [Column(TypeName = "decimal(11,8)")]
+    public decimal Longitud { get; set; }
 
     [MaxLength(100)]
     public string? Distrito { get; set; }
