@@ -1,28 +1,30 @@
 # Deuna.Orders.Service/Dockerfile
 # Multi-stage build para Orders Service
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS base
+FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine AS build
+WORKDIR /src
+
+# Copiar solo los csproj primero para cache de capas
+COPY ["Deuna.Orders.Service/Deuna.Orders.Service.csproj", "Deuna.Orders.Service/"]
+COPY ["Deuna.Shared/Deuna.Shared.csproj", "Deuna.Shared/"]
+
+# Restaurar dependencias
+WORKDIR "/src/Deuna.Orders.Service"
+RUN dotnet restore "Deuna.Orders.Service.csproj"
+
+# Copiar SOLO el código fuente necesario
+COPY Deuna.Orders.Service/ Deuna.Orders.Service/
+COPY Deuna.Shared/ Deuna.Shared/
+
+# Build y publish
+RUN dotnet publish "Deuna.Orders.Service.csproj" -c Release -o /app/publish --no-restore /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS final
 WORKDIR /app
-EXPOSE 8080
 
 # Usuario no-root para seguridad
 RUN adduser -D -u 1001 appuser
 USER appuser
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
-WORKDIR /src
-COPY ["Deuna.Orders.Service/Deuna.Orders.Service.csproj", "Deuna.Orders.Service/"]
-COPY ["Deuna.Shared/Deuna.Shared.csproj", "Deuna.Shared/"]
-RUN dotnet restore "Deuna.Orders.Service/Deuna.Orders.Service.csproj"
-
-COPY . .
-WORKDIR "/src/Deuna.Orders.Service"
-RUN dotnet build "Deuna.Orders.Service.csproj" -c Release -o /app/build --no-restore
-
-FROM build AS publish
-RUN dotnet publish "Deuna.Orders.Service.csproj" -c Release -o /app/publish --no-restore /p:UseAppHost=false
-
-FROM base AS final
-WORKDIR /app
-COPY --from=publish /app/publish .
+COPY --from=build --chown=appuser:appuser /app/publish .
 ENTRYPOINT ["dotnet", "Deuna.Orders.Service.dll"]

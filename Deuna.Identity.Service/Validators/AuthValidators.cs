@@ -3,6 +3,114 @@ using Deuna.Identity.Service.DTOs;
 
 namespace Deuna.Identity.Service.Validators;
 
+public class RegisterRestaurantRequestValidator : AbstractValidator<RegisterRestaurantRequest>
+{
+    public RegisterRestaurantRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email es requerido")
+            .EmailAddress().WithMessage("Email inválido")
+            .MaximumLength(256).WithMessage("Email demasiado largo");
+
+        RuleFor(x => x.Password)
+            .NotEmpty().WithMessage("Contraseña es requerida")
+            .MinimumLength(8).WithMessage("Contraseña debe tener al menos 8 caracteres")
+            .MaximumLength(100).WithMessage("Contraseña demasiado larga")
+            .Matches("[A-Z]").WithMessage("Contraseña debe tener al menos una mayúscula")
+            .Matches("[a-z]").WithMessage("Contraseña debe tener al menos una minúscula")
+            .Matches("[0-9]").WithMessage("Contraseña debe tener al menos un número")
+            .Matches("[^a-zA-Z0-9]").WithMessage("Contraseña debe tener al menos un carácter especial");
+
+        RuleFor(x => x.FirstName)
+            .MaximumLength(100).When(x => !string.IsNullOrEmpty(x.FirstName))
+            .WithMessage("Nombre demasiado largo");
+
+        RuleFor(x => x.LastName)
+            .MaximumLength(100).When(x => !string.IsNullOrEmpty(x.LastName))
+            .WithMessage("Apellido demasiado largo");
+
+        RuleFor(x => x.PhoneNumber)
+            .Matches(@"^\+?[1-9]\d{1,14}$").When(x => !string.IsNullOrEmpty(x.PhoneNumber))
+            .WithMessage("Número de teléfono inválido");
+
+        RuleFor(x => x.RazonSocial)
+            .NotEmpty().WithMessage("Razón social es requerida")
+            .MaximumLength(255).WithMessage("Razón social demasiado larga");
+
+        RuleFor(x => x.NombreComercial)
+            .NotEmpty().WithMessage("Nombre comercial es requerido")
+            .MaximumLength(255).WithMessage("Nombre comercial demasiado largo");
+
+        RuleFor(x => x.Nit)
+            .NotEmpty().WithMessage("NIT es requerido")
+            .MaximumLength(50).WithMessage("NIT demasiado largo");
+
+        RuleFor(x => x.DireccionSede)
+            .NotEmpty().WithMessage("Dirección de sede es requerida")
+            .MaximumLength(500).WithMessage("Dirección de sede demasiado larga");
+
+        RuleFor(x => x.Ciudad)
+            .NotEmpty().WithMessage("Ciudad es requerida")
+            .MaximumLength(100).WithMessage("Ciudad demasiado larga");
+
+        RuleFor(x => x.Latitud)
+            .NotEmpty().WithMessage("Latitud es requerida")
+            .InclusiveBetween(-90, 90).WithMessage("Latitud inválida");
+
+        RuleFor(x => x.Longitud)
+            .NotEmpty().WithMessage("Longitud es requerida")
+            .InclusiveBetween(-180, 180).WithMessage("Longitud inválida");
+    }
+}
+
+public class RegisterRiderRequestValidator : AbstractValidator<RegisterRiderRequest>
+{
+    public RegisterRiderRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email es requerido")
+            .EmailAddress().WithMessage("Email inválido")
+            .MaximumLength(256).WithMessage("Email demasiado largo");
+
+        RuleFor(x => x.Password)
+            .NotEmpty().WithMessage("Contraseña es requerida")
+            .MinimumLength(8).WithMessage("Contraseña debe tener al menos 8 caracteres")
+            .MaximumLength(100).WithMessage("Contraseña demasiado larga")
+            .Matches("[A-Z]").WithMessage("Contraseña debe tener al menos una mayúscula")
+            .Matches("[a-z]").WithMessage("Contraseña debe tener al menos una minúscula")
+            .Matches("[0-9]").WithMessage("Contraseña debe tener al menos un número")
+            .Matches("[^a-zA-Z0-9]").WithMessage("Contraseña debe tener al menos un carácter especial");
+
+        RuleFor(x => x.FirstName)
+            .MaximumLength(100).When(x => !string.IsNullOrEmpty(x.FirstName))
+            .WithMessage("Nombre demasiado largo");
+
+        RuleFor(x => x.LastName)
+            .MaximumLength(100).When(x => !string.IsNullOrEmpty(x.LastName))
+            .WithMessage("Apellido demasiado largo");
+
+        RuleFor(x => x.PhoneNumber)
+            .Matches(@"^\+?[1-9]\d{1,14}$").When(x => !string.IsNullOrEmpty(x.PhoneNumber))
+            .WithMessage("Número de teléfono inválido");
+
+        RuleFor(x => x.NombreCompleto)
+            .NotEmpty().WithMessage("Nombre completo es requerido")
+            .MaximumLength(255).WithMessage("Nombre completo demasiado largo");
+
+        RuleFor(x => x.DocumentoIdentidad)
+            .NotEmpty().WithMessage("Documento de identidad es requerido")
+            .MaximumLength(50).WithMessage("Documento de identidad demasiado largo");
+
+        RuleFor(x => x.CiudadOperacion)
+            .NotEmpty().WithMessage("Ciudad de operación es requerida")
+            .MaximumLength(100).WithMessage("Ciudad de operación demasiado larga");
+
+        RuleFor(x => x.FotoPerfilUrl)
+            .MaximumLength(500).When(x => !string.IsNullOrEmpty(x.FotoPerfilUrl))
+            .WithMessage("URL de foto de perfil demasiado larga");
+    }
+}
+
 public class RegisterRequestValidator : AbstractValidator<RegisterRequest>
 {
     public RegisterRequestValidator()

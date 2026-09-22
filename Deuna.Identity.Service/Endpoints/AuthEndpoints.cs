@@ -3,6 +3,7 @@ using Deuna.Identity.Service.Services;
 using Deuna.Identity.Service.Validators;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Deuna.Identity.Service.Endpoints;
 
@@ -10,19 +11,25 @@ public static class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/identity/auth")
+        var group = app.MapGroup("/api/v1/identity")
             .WithTags("Auth")
             .WithOpenApi();
 
-        group.MapPost("/register", RegisterAsync)
-            .WithName("Register")
-            .WithSummary("Registrar nuevo usuario")
+        group.MapPost("/register/restaurant", RegisterRestaurantAsync)
+            .WithName("RegisterRestaurant")
+            .WithSummary("Registrar nuevo restaurante")
+            .AllowAnonymous();
+
+        group.MapPost("/register/rider", RegisterRiderAsync)
+            .WithName("RegisterRider")
+            .WithSummary("Registrar nuevo repartidor")
             .AllowAnonymous();
 
         group.MapPost("/login", LoginAsync)
             .WithName("Login")
             .WithSummary("Iniciar sesión")
-            .AllowAnonymous();
+            .AllowAnonymous()
+            .RequireRateLimiting("login");
 
         group.MapPost("/refresh", RefreshTokenAsync)
             .WithName("RefreshToken")
@@ -67,10 +74,10 @@ public static class AuthEndpoints
         return app;
     }
 
-    private static async Task<IResult> RegisterAsync(
-        [FromBody] RegisterRequest request,
+    private static async Task<IResult> RegisterRestaurantAsync(
+        [FromBody] RegisterRestaurantRequest request,
         [FromServices] IAuthService authService,
-        [FromServices] IValidator<RegisterRequest> validator)
+        [FromServices] IValidator<RegisterRestaurantRequest> validator)
     {
         var validation = await validator.ValidateAsync(request);
         if (!validation.IsValid)
@@ -78,7 +85,22 @@ public static class AuthEndpoints
             return Results.BadRequest(new AuthResponse(false, "Datos inválidos", validation.Errors.Select(e => e.ErrorMessage)));
         }
 
-        var result = await authService.RegisterAsync(request);
+        var result = await authService.RegisterRestaurantAsync(request);
+        return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+    }
+
+    private static async Task<IResult> RegisterRiderAsync(
+        [FromBody] RegisterRiderRequest request,
+        [FromServices] IAuthService authService,
+        [FromServices] IValidator<RegisterRiderRequest> validator)
+    {
+        var validation = await validator.ValidateAsync(request);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new AuthResponse(false, "Datos inválidos", validation.Errors.Select(e => e.ErrorMessage)));
+        }
+
+        var result = await authService.RegisterRiderAsync(request);
         return result.Success ? Results.Ok(result) : Results.BadRequest(result);
     }
 
@@ -94,7 +116,14 @@ public static class AuthEndpoints
         }
 
         var result = await authService.LoginAsync(request);
-        return result.Success ? Results.Ok(result) : Results.Unauthorized();
+        if (!result.Success)
+        {
+            // Return 403 for inactive account, 401 for invalid credentials
+            return result.Message == "La cuenta está desactivada" 
+                ? Results.Forbid() 
+                : Results.Unauthorized();
+        }
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> RefreshTokenAsync(

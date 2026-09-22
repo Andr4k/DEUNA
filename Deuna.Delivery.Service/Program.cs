@@ -3,6 +3,7 @@ using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using RabbitMQ.Client;
 using Serilog;
 using StackExchange.Redis;
 
@@ -49,12 +50,16 @@ builder.Services.AddMassTransit(x =>
 
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:rabbitmq_dev_2026@localhost:5672/deuna";
+var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
 var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<DeliveryDbContext>()
-    .AddRedis(redisConnectionString: redisConn)
-    .AddRabbitMQ(rabbitConnectionString: rabbitConn);
+    .AddRedis(redisConn)
+    .AddRabbitMQ(sp => 
+    {
+        var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = new Uri(rabbitConn) };
+        return factory.CreateConnectionAsync().GetAwaiter().GetResult();
+    });
 
 var app = builder.Build();
 

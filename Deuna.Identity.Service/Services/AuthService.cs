@@ -15,6 +15,8 @@ namespace Deuna.Identity.Service.Services;
 
 public interface IAuthService
 {
+    Task<AuthResponse> RegisterRestaurantAsync(RegisterRestaurantRequest request);
+    Task<AuthResponse> RegisterRiderAsync(RegisterRiderRequest request);
     Task<AuthResponse> RegisterAsync(RegisterRequest request);
     Task<AuthResponse> LoginAsync(LoginRequest request);
     Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request);
@@ -38,6 +40,133 @@ public class AuthService : IAuthService
         _db = db;
         _config = config;
         _logger = logger;
+    }
+
+    public async Task<AuthResponse> RegisterRestaurantAsync(RegisterRestaurantRequest request)
+    {
+        var existingUser = await _db.Usuarios.FirstOrDefaultAsync(u => u.Email == request.Email);
+        if (existingUser != null)
+        {
+            return new AuthResponse(false, "El email ya está registrado");
+        }
+
+        if (request.PhoneNumber != null)
+        {
+            var existingPhone = await _db.Usuarios.FirstOrDefaultAsync(u => u.PhoneNumber == request.PhoneNumber);
+            if (existingPhone != null)
+            {
+                return new AuthResponse(false, "El número de teléfono ya está registrado");
+            }
+        }
+
+        var existingNit = await _db.PerfilesRestaurante.FirstOrDefaultAsync(p => p.Nit == request.Nit);
+        if (existingNit != null)
+        {
+            return new AuthResponse(false, "El NIT ya está registrado");
+        }
+
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, workFactor: 12);
+
+        var user = new Usuario
+        {
+            Email = request.Email,
+            PasswordHash = passwordHash,
+            FirstName = request.FirstName,
+            LastName = request.LastName,
+            PhoneNumber = request.PhoneNumber,
+            IsActive = true,
+            EmailConfirmed = false,
+            PhoneConfirmed = false
+        };
+
+        _db.Usuarios.Add(user);
+        await _db.SaveChangesAsync();
+
+        _db.PerfilesRestaurante.Add(new PerfilRestaurante
+        {
+            UsuarioId = user.Id,
+            RazonSocial = request.RazonSocial,
+            NombreComercial = request.NombreComercial,
+            Nit = request.Nit,
+            Activo = true,
+            AceptaPedidos = false
+        });
+
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Restaurante registrado: {Email}", request.Email);
+
+        return new AuthResponse(true, "Registro exitoso. Verifique su email.", new
+        {
+            UserId = user.Id,
+            Email = user.Email,
+            Role = "Restaurant",
+            VerificationToken = GenerateSecureToken()
+        });
+    }
+
+    public async Task<AuthResponse> RegisterRiderAsync(RegisterRiderRequest request)
+    {
+        var existingUser = await _db.Usuarios.FirstOrDefaultAsync(u => u.Email == request.Email);
+        if (existingUser != null)
+        {
+            return new AuthResponse(false, "El email ya está registrado");
+        }
+
+        if (request.PhoneNumber != null)
+        {
+            var existingPhone = await _db.Usuarios.FirstOrDefaultAsync(u => u.PhoneNumber == request.PhoneNumber);
+            if (existingPhone != null)
+            {
+                return new AuthResponse(false, "El número de teléfono ya está registrado");
+            }
+        }
+
+        var existingDoc = await _db.PerfilesRepartidor.FirstOrDefaultAsync(p => p.NumeroLicencia == request.DocumentoIdentidad);
+        if (existingDoc != null)
+        {
+            return new AuthResponse(false, "El documento de identidad ya está registrado");
+        }
+
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password, workFactor: 12);
+
+        var user = new Usuario
+        {
+            Email = request.Email,
+            PasswordHash = passwordHash,
+            FirstName = request.FirstName,
+            LastName = request.LastName,
+            PhoneNumber = request.PhoneNumber,
+            IsActive = true,
+            EmailConfirmed = false,
+            PhoneConfirmed = false
+        };
+
+        _db.Usuarios.Add(user);
+        await _db.SaveChangesAsync();
+
+        _db.PerfilesRepartidor.Add(new PerfilRepartidor
+        {
+            UsuarioId = user.Id,
+            NumeroLicencia = request.DocumentoIdentidad,
+            NombreCompleto = request.NombreCompleto,
+            CiudadOperacion = request.CiudadOperacion,
+            FotoPerfilUrl = request.FotoPerfilUrl,
+            Activo = true,
+            Disponible = false
+        });
+
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Repartidor registrado: {Email}", request.Email);
+
+        return new AuthResponse(true, "Registro exitoso. Verifique su email.", new
+        {
+            UserId = user.Id,
+            Email = user.Email,
+            Role = "Courier",
+            VerificationToken = GenerateSecureToken()
+        });
     }
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
@@ -161,16 +290,16 @@ public class AuthService : IAuthService
             return new AuthResponse(false, "Perfil de administrador inactivo");
         }
 
-        // Generate tokens
+        // Generate tokens - JWT expires in 8 hours per spec
         var accessToken = GenerateAccessToken(user, role);
         var refreshTokenValue = GenerateSecureToken();
-        var expiresAt = DateTime.UtcNow.AddMinutes(GetAccessTokenExpiryMinutes(request.RememberMe));
+        var expiresAt = DateTime.UtcNow.AddHours(8); // 8 hours fixed per spec
 
         var refreshToken = new RefreshToken
         {
             UsuarioId = user.Id,
             Token = refreshTokenValue,
-            ExpiresAt = DateTime.UtcNow.AddDays(request.RememberMe ? 30 : 7),
+            ExpiresAt = DateTime.UtcNow.AddDays(7),
             CreatedByIp = "login"
         };
 
@@ -484,7 +613,7 @@ public class AuthService : IAuthService
             issuer: _config["Jwt:Issuer"] ?? "Deuna.Identity",
             audience: _config["Jwt:Audience"] ?? "Deuna.Api",
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(GetAccessTokenExpiryMinutes(false)),
+            expires: DateTime.UtcNow.AddHours(8), // 8 hours fixed per spec
             signingCredentials: creds
         );
 

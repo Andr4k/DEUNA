@@ -32,6 +32,12 @@ public class IdentityDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        // Skip relational-specific configuration for InMemory database
+        if (Database.IsInMemory())
+        {
+            return;
+        }
+
         // ========== USUARIO ==========
         modelBuilder.Entity<Usuario>(entity =>
         {
@@ -75,9 +81,12 @@ public class IdentityDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.UsuarioId).IsRequired();
             entity.Property(e => e.NombreComercial).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.RazonSocial).HasMaxLength(200);
-            entity.Property(e => e.Ruc).HasMaxLength(20);
-            entity.Property(e => e.Direccion).HasMaxLength(500);
+            entity.Property(e => e.RazonSocial).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Nit).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.DireccionSede).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Ciudad).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Latitud).IsRequired().HasColumnType("decimal(10,8)");
+            entity.Property(e => e.Longitud).IsRequired().HasColumnType("decimal(11,8)");
             entity.Property(e => e.Distrito).HasMaxLength(100);
             entity.Property(e => e.Provincia).HasMaxLength(100);
             entity.Property(e => e.Departamento).HasMaxLength(100);
@@ -89,7 +98,7 @@ public class IdentityDbContext : DbContext
             entity.Property(e => e.CreatedAt).IsRequired();
             entity.Property(e => e.UpdatedAt);
             entity.HasIndex(e => e.UsuarioId).IsUnique().HasDatabaseName("ix_perfiles_restaurante_usuario");
-            entity.HasIndex(e => e.Ruc).IsUnique().HasDatabaseName("ix_perfiles_restaurante_ruc").HasFilter("\"Ruc\" IS NOT NULL");
+            entity.HasIndex(e => e.Nit).IsUnique().HasDatabaseName("ix_perfiles_restaurante_nit");
             entity.HasIndex(e => e.Activo).HasDatabaseName("ix_perfiles_restaurante_activo");
 
             // Subtablas

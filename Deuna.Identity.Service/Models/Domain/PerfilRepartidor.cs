@@ -15,13 +15,22 @@ public class PerfilRepartidor
     [Required]
     public Guid UsuarioId { get; set; }
 
+    [Required]
     [MaxLength(20)]
-    public string? NumeroLicencia { get; set; }
+    public string NumeroLicencia { get; set; } = string.Empty;
 
     [MaxLength(100)]
     public string? TipoLicencia { get; set; } // A1, A2, B, etc.
 
     public DateTime? FechaVencimientoLicencia { get; set; }
+
+    [Required]
+    [MaxLength(255)]
+    public string NombreCompleto { get; set; } = string.Empty;
+
+    [Required]
+    [MaxLength(100)]
+    public string CiudadOperacion { get; set; } = string.Empty;
 
     [MaxLength(500)]
     public string? FotoPerfilUrl { get; set; }
