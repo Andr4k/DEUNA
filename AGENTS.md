@@ -654,7 +654,91 @@ dotnet clean && rm -rf */bin */obj
 
 ---
 
-**Última Actualización:** 2026-09-18  
-**Versión:** 1.0.0  
+**Última Actualización:** 2026-09-21  
+**Versión:** 1.1.0  
 **Ruta Obsidian:** `/mnt/c/Users/Andres David/Documents/Proyects-Software/DEUNA Domicilios/`  
 **Proyecto:** DEUNA Domicilios & Feedback Engine
+
+---
+
+## 12. Estado Actual del Proyecto (2026-09-21)
+
+### ✅ Sprint 0 - Infraestructura (COMPLETADO)
+
+| Tarea | Estado | Branch | MR | Commits | Tiempo Real |
+|-------|--------|--------|-----|---------|-------------|
+| TASK-001: Solución .NET 9 + 6 microservicios | ✅ COMPLETADO | `feature/TASK-001` | #1 | 6 | 2.5h |
+| TASK-002: Docker Compose (PostgreSQL x4, Redis, RabbitMQ) | ✅ COMPLETADO | `feature/TASK-002` | #2 | 4 | 1.5h |
+| TASK-003: API Gateway YARP + JWT + Rate Limit | ✅ COMPLETADO | `feature/TASK-003` | #5 | 6 | 3.5h |
+| TASK-004: Middleware JWT Compartido (Deuna.Shared) | ✅ COMPLETADO | (en TASK-003) | #5 | 3 | 2h |
+
+**Infraestructura Docker Compose:**
+- 6 microservicios: Identity, Gateway, Orders, Delivery, Feedback
+- 4 PostgreSQL (Identity, Orders/PostGIS, Delivery, Feedback)
+- Redis 7 (puerto 6379)
+- RabbitMQ 3.13 Management UI (5672/15672)
+
+**Dockerfiles Multi-stage (.NET 9 Alpine):**
+- Build context raíz con `.dockerignore` global
+- Cada servicio copia solo sus fuentes necesarias
+- Usuario no-root (appuser:1001)
+- Health checks RabbitMQ v9 con factory async
+
+### ✅ Sprint 1 - Identity Service (COMPLETADO)
+
+| Tarea | Estado | Branch | MR | Commits | Tiempo Real |
+|-------|--------|--------|-----|---------|-------------|
+| TASK-101: Modelos & Migraciones Identity DB | ✅ COMPLETADO | `feature/TASK-101` | #3 | 4 | 3h |
+| TASK-102: RegisterRestaurant + RegisterRider | ✅ COMPLETADO | `feature/TASK-102` | #3 | 7 | 5h |
+| TASK-103: Login & JWT (TDD) | ✅ COMPLETADO | `feature/TASK-103` | #4 | 5 | 3h |
+
+**Endpoints Identity:**
+- `POST /api/v1/identity/register/restaurant` ✅
+- `POST /api/v1/identity/register/rider` ✅
+- `POST /api/v1/identity/login` (TDD 6 tests, 100% coverage) ✅
+
+**Especs Login cumplidas:**
+- Rate limiting: 5 req/min por IP
+- JWT 8h expiración fija
+- HTTP 401 genérico (no enumera emails)
+- HTTP 403 cuenta inactiva
+- BCrypt cost 12
+- Actualiza `ultimo_login`
+
+### 📋 Próximas Tareas (Sprint 2-3)
+
+| Tarea | Prioridad | Estimación | Dependencias |
+|-------|-----------|------------|--------------|
+| TASK-201: Modelos & Migraciones Orders DB (PostGIS) | P1 | 5h | TASK-101 |
+| TASK-202: CreateOrder (4 pasos, QR, PostGIS distancias) | P1 | 8h | TASK-201 |
+| TASK-301: Consumer PedidoCreado (Delivery) | P1 | 4h | TASK-202 |
+| TASK-302: Tracking GPS Redis | P1 | 6h | TASK-301 |
+
+### Comandos de Validación Actual
+
+```bash
+# Levantar stack completo
+cd /mnt/c/Users/Andres\ David/Documents/Proyectos/app-pedidos
+sudo docker-compose up -d
+
+# Verificar servicios
+sudo docker-compose ps
+# Deben mostrar: 6 microservicios + 6 infra = 12 contenedores "healthy"
+
+# Tests Identity
+cd Deuna.Identity.Service.Tests
+dotnet test --filter "FullyQualifiedName~LoginTests"
+
+# Build completo
+sudo docker-compose build --no-cache
+```
+
+### Endpoints Activos (via Gateway puerto 5000)
+
+| Servicio | Endpoints | Puerto Directo |
+|----------|-----------|----------------|
+| Identity | `/api/v1/identity/register/restaurant`, `/register/rider`, `/login` | 5001 |
+| Gateway  | Enruta todo `/api/v1/*` | 5000 |
+| Orders   | `/api/v1/orders` (pendiente implementar) | 5002 |
+| Delivery | `/api/v1/delivery` (pendiente) | 5003 |
+| Feedback | `/api/v1/feedback` (pendiente) | 5004 |
