@@ -53,6 +53,8 @@ public class PedidoCreadoConsumer : IConsumer<PedidoCreado>
             Estado = PedidoDisponible.EstadoBuscando,
             QrCodigo = evento.QrCodigo,
             CorrelationId = correlationId,
+            Latitud = evento.Latitud,
+            Longitud = evento.Longitud,
             FechaCreacion = evento.OccurredAt == default ? DateTime.UtcNow : evento.OccurredAt
         };
 
