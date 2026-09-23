@@ -11,6 +11,7 @@ public class DeliveryDbContext : DbContext
     public DbSet<DeliveryTracking> DeliveryTrackings => Set<DeliveryTracking>();
     public DbSet<PedidoDisponible> PedidosDisponibles => Set<PedidoDisponible>();
     public DbSet<RepartidorReplicado> RepartidoresReplicados => Set<RepartidorReplicado>();
+    public DbSet<AsignacionRepartidor> AsignacionesRepartidor => Set<AsignacionRepartidor>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -47,6 +48,22 @@ public class DeliveryDbContext : DbContext
 
             entity.HasIndex(e => e.Activo);
             entity.HasIndex(e => e.CiudadOperacion);
+        });
+
+        modelBuilder.Entity<AsignacionRepartidor>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PedidoId).IsRequired();
+            entity.Property(e => e.RepartidorId).IsRequired();
+            entity.Property(e => e.Estado).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.FechaAsignacion).IsRequired();
+            entity.Property(e => e.MotivoRechazo).HasMaxLength(300);
+
+            // Un pedido puede tener varias asignaciones (rechazos), pero solo una activa:
+            // el estado actual vive en pedidos_disponibles.
+            entity.HasIndex(e => e.PedidoId);
+            entity.HasIndex(e => e.RepartidorId);
+            entity.HasIndex(e => new { e.RepartidorId, e.Estado });
         });
 
         modelBuilder.Entity<Delivery>(entity =>

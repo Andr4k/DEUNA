@@ -86,6 +86,18 @@ builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 builder.Services.AddScoped<ITrackingStore, RedisTrackingStore>();
 builder.Services.AddScoped<ITrackingService, TrackingService>();
 
+// Asignación automática (TASK-303): el radio es configurable, no una constante.
+builder.Services.Configure<AsignacionOptions>(builder.Configuration.GetSection(AsignacionOptions.Seccion));
+builder.Services.AddScoped<IAsignacionService, AsignacionService>();
+
+if (!useInMemory)
+{
+    // El reintento periódico solo corre en el servicio real: en tests interferiría con
+    // las bases InMemory de cada clase, y su lógica ya está cubierta por
+    // AsignacionServiceTests.ReintentaLosPedidosQueQuedaronEnBuscando.
+    builder.Services.AddHostedService<AsignacionBackgroundService>();
+}
+
 var rabbitUri = RabbitMqConnection.BuildUri(builder.Configuration);
 var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
 
@@ -126,6 +138,9 @@ app.MapGet("/api/delivery/health", () => Results.Ok(new { status = "healthy", se
 
 // Tracking GPS (TASK-302)
 app.MapTrackingEndpoints();
+
+// Asignación automática (TASK-303)
+app.MapAssignmentEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {

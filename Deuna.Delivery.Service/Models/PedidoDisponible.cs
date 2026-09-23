@@ -59,4 +59,16 @@ public class PedidoDisponible
 
     public const string EstadoBuscando = "Buscando";
     public const string EstadoAsignado = "Asignado";
+    public const string EstadoConfirmadoEnLocal = "ConfirmadoEnLocal";
+    public const string EstadoEnRuta = "EnRuta";
+    public const string EstadoEntregado = "Entregado";
+    public const string EstadoCancelado = "Cancelado";
+
+    /// <summary>
+    /// Estados en los que el repartidor está ocupado con este pedido. La asignación
+    /// automática descarta a quien tenga alguno de estos: un repartidor no puede llevar
+    /// dos entregas a la vez (FR-003.1).
+    /// </summary>
+    public static readonly string[] EstadosQueOcupanAlRepartidor =
+        [EstadoAsignado, EstadoConfirmadoEnLocal, EstadoEnRuta];
 }
