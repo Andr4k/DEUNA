@@ -91,7 +91,7 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         result.Should().NotBeNull();
         result!.PedidoId.Should().NotBeEmpty();
         result.Codigo.Should().StartWith("PED-");
-        result.QrCodigo.Should().NotBeNullOrEmpty().And.HaveLength(32);
+        result.TokenQrLocal.Should().NotBeNullOrEmpty().And.HaveLength(32);
         result.Estado.Should().Be("Pendiente");
         result.Subtotal.Should().Be(62000m); // 2*25000 + 1*12000
         result.CostoEnvio.Should().BeGreaterThan(0);
@@ -278,6 +278,10 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         pedido.DireccionEntrega.Should().NotBeNull();
         pedido.DireccionEntrega.Ubicacion.Should().NotBeNull();
         pedido.Codigo.Should().StartWith("PED-");
-        pedido.QrCodigo.Should().HaveLength(32);
+        pedido.TokenQrLocal.Should().HaveLength(32);
+        pedido.TokenQrEntrega.Should().HaveLength(32);
+        // Son de partes distintas: el del local lo escanea el domiciliario, el de entrega el
+        // cliente. Si pudieran coincidir, el QR del local no probaría nada (FR-002.5).
+        pedido.TokenQrLocal.Should().NotBe(pedido.TokenQrEntrega);
     }
 }

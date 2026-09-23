@@ -34,7 +34,8 @@ public class PedidoCreadoConsumerTests
         RestauranteId: RestauranteId,
         Total: 62000m,
         Estado: "Pendiente",
-        QrCodigo: "qr-token-abc123",
+        TokenQrLocal: "qr-local-abc123",
+        TokenQrEntrega: "qr-entrega-abc123",
         OccurredAt: DateTime.UtcNow);
 
     /// <summary>
@@ -54,6 +55,9 @@ public class PedidoCreadoConsumerTests
 
         public Task<IReadOnlyList<PedidoAsignadoDto>> ObtenerAsignadosAsync(Guid repartidorId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PedidoAsignadoDto>>([]);
+
+        public Task<ResultadoValidacionQr> ValidarQrLocalAsync(Guid pedidoId, Guid repartidorId, string tokenQrLocal, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ResultadoValidacionQr(false, "no aplica (doble de test)", MotivoRechazoQr.PedidoNoEncontrado));
     }
 
     [Fact]
@@ -108,7 +112,8 @@ public class PedidoCreadoConsumerTests
             pedido.ClienteId.Should().Be(evento.ClienteId);
             pedido.RestauranteId.Should().Be(evento.RestauranteId);
             pedido.Total.Should().Be(evento.Total);
-            pedido.QrCodigo.Should().Be(evento.QrCodigo);
+            pedido.TokenQrLocal.Should().Be(evento.TokenQrLocal);
+            pedido.TokenQrEntrega.Should().Be(evento.TokenQrEntrega);
             pedido.CorrelationId.Should().Be(CorrelationId);
         }
         finally
@@ -178,7 +183,8 @@ public class PedidoCreadoConsumerRegistrationTests : IClassFixture<TestWebApplic
             RestauranteId: Guid.NewGuid(),
             Total: 45000m,
             Estado: "Pendiente",
-            QrCodigo: "qr-registration-token",
+            TokenQrLocal: "qr-local-registration",
+            TokenQrEntrega: "qr-entrega-registration",
             OccurredAt: DateTime.UtcNow);
 
         // Act

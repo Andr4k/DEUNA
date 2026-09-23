@@ -122,8 +122,11 @@ public class PedidoService : IPedidoService
         // Generar código PED-XXXXXX
         var codigo = await GenerarCodigoPedidoAsync();
 
-        // Generar QR UUID
-        var qrCodigo = GenerarQrCodigo();
+        // Dos tokens, no uno: el del local lo escanea el domiciliario al llegar y el de
+        // entrega lo escanea el cliente al recibir (FR-002.5). Son de partes distintas, así
+        // que no pueden compartir valor.
+        var tokenQrLocal = GenerarTokenQr();
+        var tokenQrEntrega = GenerarTokenQr();
 
         // Crear pedido principal
         var pedido = new Pedido
@@ -136,7 +139,8 @@ public class PedidoService : IPedidoService
             CostoEnvio = tarifa.TotalCalculado,
             Total = subtotal + tarifa.TotalCalculado,
             DireccionEntregaId = direccionEntrega.Id,
-            QrCodigo = qrCodigo,
+            TokenQrLocal = tokenQrLocal,
+            TokenQrEntrega = tokenQrEntrega,
             NotasCliente = request.NotasCliente
         };
 
@@ -193,7 +197,8 @@ public class PedidoService : IPedidoService
             RestauranteId: pedido.RestauranteId,
             Total: pedido.Total,
             Estado: pedido.Estado,
-            QrCodigo: pedido.QrCodigo,
+            TokenQrLocal: pedido.TokenQrLocal,
+            TokenQrEntrega: pedido.TokenQrEntrega,
             OccurredAt: DateTime.UtcNow,
             // Punto de entrega para el tracking geoespacial de Delivery
             Latitud: (double)request.DireccionEntrega.Latitud,
@@ -208,7 +213,7 @@ public class PedidoService : IPedidoService
         return new CrearPedidoResponse(
             PedidoId: pedido.Id,
             Codigo: pedido.Codigo,
-            QrCodigo: pedido.QrCodigo,
+            TokenQrLocal: pedido.TokenQrLocal,
             Estado: pedido.Estado,
             Subtotal: pedido.Subtotal,
             CostoEnvio: pedido.CostoEnvio,
@@ -287,9 +292,12 @@ public class PedidoService : IPedidoService
         return $"{prefix}-{sequence:D6}";
     }
 
-    private string GenerarQrCodigo()
+    /// <summary>
+    /// Token QR: UUID v4 en hexadecimal sin guiones. Se generan DOS por pedido y no pueden
+    /// repetirse entre sí — cada uno lo escanea una parte distinta (FR-002.5).
+    /// </summary>
+    private string GenerarTokenQr()
     {
-        // UUID v4 para QR
         return Guid.NewGuid().ToString("N")[..32]; // 32 chars hex
     }
 
@@ -329,7 +337,7 @@ public class PedidoService : IPedidoService
                 Latitud: (decimal)pedido.DireccionEntrega.Ubicacion.Y,
                 Longitud: (decimal)pedido.DireccionEntrega.Ubicacion.X
             ),
-            QrCodigo: pedido.QrCodigo,
+            TokenQrLocal: pedido.TokenQrLocal,
             NotasCliente: pedido.NotasCliente,
             NotasRestaurante: pedido.NotasRestaurante,
             FechaCreacion: pedido.FechaCreacion,

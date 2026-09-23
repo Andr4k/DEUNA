@@ -73,6 +73,53 @@ public static class AssignmentEndpoints
         .WithName("RejectOrder")
         .WithSummary("Rechaza el pedido asignado antes de llegar al local (dispara reasignación)");
 
+        // POST /api/v1/delivery/validate-qr-local — el domiciliario escanea el QR del local
+        grupo.MapPost("/validate-qr-local", async (
+            ValidarQrLocalRequest request,
+            IAsignacionService asignacion,
+            IValidator<ValidarQrLocalRequest> validator,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var validacion = await validator.ValidateAsync(request, cancellationToken);
+            if (!validacion.IsValid)
+            {
+                return Results.ValidationProblem(validacion.ToDictionary());
+            }
+
+            // El domiciliario sale del token: el cuerpo no puede decir quién es.
+            var repartidorId = httpContext.GetUserId();
+            if (repartidorId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var resultado = await asignacion.ValidarQrLocalAsync(
+                request.OrderId, repartidorId.Value, request.TokenQrLocal, cancellationToken);
+
+            if (!resultado.Valido)
+            {
+                return resultado.Motivo switch
+                {
+                    MotivoRechazoQr.PedidoNoEncontrado => Results.NotFound(new { message = resultado.Mensaje }),
+                    MotivoRechazoQr.NoAsignado => Results.StatusCode(StatusCodes.Status403Forbidden),
+                    _ => Results.BadRequest(new { message = resultado.Mensaje })
+                };
+            }
+
+            return Results.Ok(new
+            {
+                message = resultado.Mensaje,
+                estado = resultado.Estado,
+                fechaLlegadaLocal = resultado.FechaLlegadaLocal,
+                // El paso siguiente del flujo (TASK-305) queda habilitado.
+                puedeIniciarEntrega = true
+            });
+        })
+        .RequireAuthorization("rider")
+        .WithName("ValidateLocalQr")
+        .WithSummary("Valida el QR que muestra el restaurante y confirma la llegada al local");
+
         return app;
     }
 }

@@ -38,7 +38,36 @@ public record PedidoAsignadoDto(
     double? LongitudEntrega,
     double? DistanciaMetros,
     DateTime? AsignadoAt,
-    DateTime FechaCreacion);
+    DateTime FechaCreacion,
+    /// <summary>
+    /// Token que el domiciliario muestra al cliente al entregar (TASK-305). Se le entrega
+    /// porque tiene que mostrarlo; el token del local, en cambio, no viaja acá.
+    /// </summary>
+    string? TokenQrEntrega = null);
+
+/// <summary>
+/// Motivo del rechazo. Va tipado para que la capa HTTP elija el código de estado sin
+/// adivinar por el texto del mensaje.
+/// </summary>
+public enum MotivoRechazoQr
+{
+    Ninguno,
+    PedidoNoEncontrado,
+    NoAsignado,
+    EstadoInvalido,
+    TokenInvalido
+}
+
+/// <summary>
+/// Resultado de validar el QR del local. El mensaje explica el rechazo para que la app
+/// pueda mostrarlo: "no es tu pedido" y "el token no sirve" son cosas distintas.
+/// </summary>
+public record ResultadoValidacionQr(
+    bool Valido,
+    string Mensaje,
+    MotivoRechazoQr Motivo = MotivoRechazoQr.Ninguno,
+    string? Estado = null,
+    DateTime? FechaLlegadaLocal = null);
 
 /// <summary>
 /// Asignación automática del pedido al domiciliario disponible más cercano (TASK-303).
@@ -60,6 +89,16 @@ public interface IAsignacionService
 
     /// <summary>Pedidos asignados a un repartidor, con la distancia a la que fue asignado.</summary>
     Task<IReadOnlyList<PedidoAsignadoDto>> ObtenerAsignadosAsync(Guid repartidorId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Valida el QR que el restaurante muestra en el local (TASK-304). Confirma la presencia
+    /// física del domiciliario asignado y habilita el inicio de la entrega.
+    /// </summary>
+    Task<ResultadoValidacionQr> ValidarQrLocalAsync(
+        Guid pedidoId,
+        Guid repartidorId,
+        string tokenQrLocal,
+        CancellationToken cancellationToken = default);
 }
 
 public class AsignacionService : IAsignacionService
@@ -260,8 +299,88 @@ public class AsignacionService : IAsignacionService
                 p.Longitud,
                 distancias.TryGetValue(p.PedidoId, out var distancia) ? distancia : null,
                 p.AsignadoAt,
-                p.FechaCreacion))
+                p.FechaCreacion,
+                p.TokenQrEntrega))
             .ToList();
+    }
+
+    public async Task<ResultadoValidacionQr> ValidarQrLocalAsync(
+        Guid pedidoId,
+        Guid repartidorId,
+        string tokenQrLocal,
+        CancellationToken cancellationToken = default)
+    {
+        var pedido = await _db.PedidosDisponibles
+            .FirstOrDefaultAsync(p => p.PedidoId == pedidoId, cancellationToken);
+
+        if (pedido is null)
+        {
+            return new ResultadoValidacionQr(
+                false,
+                $"El pedido {pedidoId} no está proyectado en Delivery",
+                MotivoRechazoQr.PedidoNoEncontrado);
+        }
+
+        // Solo el domiciliario asignado: el QR prueba que llegó quien tiene el pedido.
+        if (pedido.RepartidorId != repartidorId)
+        {
+            return new ResultadoValidacionQr(
+                false,
+                $"El pedido {pedido.Codigo} no está asignado a este domiciliario",
+                MotivoRechazoQr.NoAsignado);
+        }
+
+        // La validación es de una sola vez: repetirla no puede volver a mover el estado ni
+        // reescribir la hora de llegada.
+        if (pedido.Estado != PedidoDisponible.EstadoAsignado)
+        {
+            return new ResultadoValidacionQr(
+                false,
+                pedido.Estado == PedidoDisponible.EstadoConfirmadoEnLocal
+                    ? $"La llegada del pedido {pedido.Codigo} ya estaba confirmada"
+                    : $"El pedido {pedido.Codigo} no está en estado de recogida (estado {pedido.Estado})",
+                MotivoRechazoQr.EstadoInvalido);
+        }
+
+        // Comparación ordinal: el token es de un solo uso, está atado a un pedido concreto y
+        // el endpoint exige el JWT del domiciliario asignado, así que un canal lateral de
+        // tiempo no aporta nada. Se recorta porque un QR escaneado puede traer espacios.
+        if (!string.Equals(pedido.TokenQrLocal, tokenQrLocal.Trim(), StringComparison.Ordinal))
+        {
+            return new ResultadoValidacionQr(
+                false,
+                $"El token del QR no corresponde al pedido {pedido.Codigo}",
+                MotivoRechazoQr.TokenInvalido);
+        }
+
+        var ahora = DateTime.UtcNow;
+
+        var asignacion = await _db.AsignacionesRepartidor
+            .Where(a => a.PedidoId == pedidoId
+                        && a.RepartidorId == repartidorId
+                        && a.Estado == AsignacionRepartidor.EstadoAsignado)
+            .OrderByDescending(a => a.FechaAsignacion)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (asignacion is not null)
+        {
+            asignacion.Estado = AsignacionRepartidor.EstadoConfirmadoEnLocal;
+            asignacion.FechaLlegadaLocal = ahora;
+        }
+
+        pedido.Estado = PedidoDisponible.EstadoConfirmadoEnLocal;
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Pedido {Codigo}: llegada confirmada en el local por {RepartidorId}",
+            pedido.Codigo, repartidorId);
+
+        return new ResultadoValidacionQr(
+            true,
+            $"Llegada confirmada para el pedido {pedido.Codigo}. Ya puedes iniciar la entrega.",
+            Estado: pedido.Estado,
+            FechaLlegadaLocal: ahora);
     }
 
     /// <summary>Repartidores con una entrega activa: no pueden recibir otra (FR-003.1).</summary>

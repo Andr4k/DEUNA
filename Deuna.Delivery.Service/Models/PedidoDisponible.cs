@@ -37,10 +37,22 @@ public class PedidoDisponible
     [MaxLength(50)]
     public string Estado { get; set; } = EstadoBuscando;
 
-    /// <summary>Token QR que el repartidor debe validar al entregar.</summary>
+    /// <summary>
+    /// Token que el domiciliario escanea al llegar al local. Está en la proyección para poder
+    /// compararlo, pero NO se le entrega al domiciliario: lo tiene que escanear del QR del
+    /// restaurante. Dárselo sería permitirle confirmar la llegada sin haber ido.
+    /// </summary>
     [Required]
     [MaxLength(64)]
-    public string QrCodigo { get; set; } = string.Empty;
+    public string TokenQrLocal { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Token que el domiciliario muestra para que el cliente lo escanee al recibir (TASK-305).
+    /// Este sí se le entrega: sin él no puede mostrarlo.
+    /// </summary>
+    [Required]
+    [MaxLength(64)]
+    public string TokenQrEntrega { get; set; } = string.Empty;
 
     /// <summary>CorrelationId del mensaje que originó el registro (trazabilidad).</summary>
     public Guid? CorrelationId { get; set; }
