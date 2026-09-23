@@ -95,6 +95,9 @@ public class CrearPedidoRequestValidator : AbstractValidator<CrearPedidoRequest>
             .NotEmpty().WithMessage("El ID del restaurante es obligatorio");
 
         RuleFor(x => x.Items)
+            // Cascade(Stop): sin esto, un `items` ausente hacía que el siguiente predicado
+            // se evaluara sobre null y el endpoint respondiera 500 en lugar de 400.
+            .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("El pedido debe tener al menos un item")
             .Must(items => items.Count <= 50).WithMessage("El pedido no puede tener más de 50 items");
 
@@ -107,6 +110,7 @@ public class CrearPedidoRequestValidator : AbstractValidator<CrearPedidoRequest>
             .SetValidator(new CrearDireccionEntregaRequestValidator());
 
         RuleFor(x => x.Contactos)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty().WithMessage("El pedido debe tener al menos un contacto")
             .Must(contactos => contactos.Count <= 10).WithMessage("El pedido no puede tener más de 10 contactos");
 
@@ -119,8 +123,8 @@ public class CrearPedidoRequestValidator : AbstractValidator<CrearPedidoRequest>
 
         // Validación cruzada: al menos un contacto de tipo Cliente
         RuleFor(x => x.Contactos)
-            .Must(contactos => contactos.Any(c => c.Tipo == "Cliente"))
+            .Must(contactos => contactos.Any(c => c is not null && c.Tipo == "Cliente"))
             .WithMessage("Debe haber al menos un contacto de tipo Cliente")
-            .When(x => x.Contactos != null);
+            .When(x => x.Contactos is { Count: > 0 });
     }
 }

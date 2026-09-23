@@ -1,8 +1,10 @@
+using Deuna.Orders.Service.Consumers;
 using Deuna.Orders.Service.Endpoints;
 using Deuna.Orders.Service.Models;
 using Deuna.Orders.Service.Services;
 using Deuna.Orders.Service.Validators;
 using Deuna.Shared.Extensions;
+using Deuna.Shared.Messaging;
 using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -36,27 +38,25 @@ builder.Services.AddMassTransit(x =>
 {
     var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
 
+    // Replicación de restaurantes desde Identity (necesaria para validar sus pedidos)
+    x.AddConsumer<RestauranteRegistradoConsumer>();
+
     if (useInMemory)
     {
         x.UsingInMemory((context, cfg) =>
         {
-            cfg.ConfigureEndpoints(context);
+            cfg.ConfigureEndpoints(context, new KebabCaseEndpointNameFormatter("orders", false));
         });
     }
     else
     {
         x.UsingRabbitMq((context, cfg) =>
         {
-            var host = builder.Configuration["RabbitMQ:Host"] ?? "localhost";
-            var port = builder.Configuration.GetValue<int>("RabbitMQ:Port", 5672);
-            var username = builder.Configuration["RabbitMQ:Username"] ?? "deuna";
-            var password = builder.Configuration["RabbitMQ:Password"] ?? "rabbitmq_dev_2026";
-            var vhost = builder.Configuration["RabbitMQ:VirtualHost"] ?? "deuna";
+            cfg.Host(RabbitMqConnection.BuildUri(builder.Configuration));
 
-            var uri = new Uri($"amqp://{username}:{password}@{host}:{port}/{vhost}");
-            cfg.Host(uri);
-
-            cfg.ConfigureEndpoints(context);
+            // Prefijo por servicio: evita compartir cola con otros servicios que consuman
+            // el mismo tipo de mensaje.
+            cfg.ConfigureEndpoints(context, new KebabCaseEndpointNameFormatter("orders", false));
         });
     }
 });
@@ -72,7 +72,7 @@ builder.Services.AddScoped<IGeoService, GeoService>();
 // Register Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
+var rabbitUri = RabbitMqConnection.BuildUri(builder.Configuration);
 var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
 
 builder.Services.AddHealthChecks()
@@ -83,7 +83,7 @@ if (!useInMemory)
     builder.Services.AddHealthChecks()
         .AddRabbitMQ(sp =>
         {
-            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = new Uri(rabbitConn) };
+            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = rabbitUri };
             return factory.CreateConnectionAsync().GetAwaiter().GetResult();
         });
 }

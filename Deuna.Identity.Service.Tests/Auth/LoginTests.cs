@@ -6,6 +6,7 @@ using Deuna.Identity.Service;
 using Deuna.Identity.Service.DTOs;
 using Deuna.Identity.Service.Models;
 using Deuna.Identity.Service.Models.Domain;
+using Deuna.Shared.Security;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -85,7 +86,7 @@ public class LoginTests : IClassFixture<TestWebApplicationFactory>
         result.Data.ExpiresAt.Should().BeAfter(DateTime.UtcNow);
         result.Data.UserId.Should().NotBeEmpty();
         result.Data.Email.Should().Be(email);
-        result.Data.Role.Should().Be("Restaurant");
+        result.Data.Role.Should().Be(Roles.Restaurant);
     }
 
     [Fact]

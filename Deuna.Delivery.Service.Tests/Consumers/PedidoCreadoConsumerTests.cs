@@ -1,5 +1,5 @@
 using Deuna.Delivery.Service.Consumers;
-using Deuna.Delivery.Service.Events;
+using Deuna.Shared.Events;
 using Deuna.Delivery.Service.Models;
 using FluentAssertions;
 using MassTransit;

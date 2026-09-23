@@ -116,6 +116,12 @@ namespace Deuna.Delivery.Service.Migrations
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<double?>("Latitud")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitud")
+                        .HasColumnType("double precision");
+
                     b.Property<Guid>("PedidoId")
                         .HasColumnType("uuid");
 

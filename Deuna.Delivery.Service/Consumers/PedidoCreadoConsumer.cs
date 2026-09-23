@@ -1,4 +1,4 @@
-using Deuna.Delivery.Service.Events;
+using Deuna.Shared.Events;
 using Deuna.Delivery.Service.Models;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -53,6 +53,8 @@ public class PedidoCreadoConsumer : IConsumer<PedidoCreado>
             Estado = PedidoDisponible.EstadoBuscando,
             QrCodigo = evento.QrCodigo,
             CorrelationId = correlationId,
+            Latitud = evento.Latitud,
+            Longitud = evento.Longitud,
             FechaCreacion = evento.OccurredAt == default ? DateTime.UtcNow : evento.OccurredAt
         };
 

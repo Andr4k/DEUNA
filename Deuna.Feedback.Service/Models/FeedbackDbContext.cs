@@ -6,52 +6,48 @@ public class FeedbackDbContext : DbContext
 {
     public FeedbackDbContext(DbContextOptions<FeedbackDbContext> options) : base(options) { }
 
-    public DbSet<Feedback> Feedbacks => Set<Feedback>();
-    public DbSet<FeedbackRating> FeedbackRatings => Set<FeedbackRating>();
+    /// <summary>Encuestas de feedback Nivel 1.</summary>
+    public DbSet<FeedbackEncuesta> FeedbackEncuestas => Set<FeedbackEncuesta>();
+
+    /// <summary>Read-model de pedidos replicados desde Orders por eventos.</summary>
+    public DbSet<PedidoReplicado> PedidosReplicados => Set<PedidoReplicado>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<Feedback>(entity =>
+        modelBuilder.Entity<FeedbackEncuesta>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.OrderId).IsRequired();
-            entity.Property(e => e.CustomerId).IsRequired();
-            entity.Property(e => e.Comment).HasMaxLength(2000);
+            entity.Property(e => e.PedidoId).IsRequired();
+            entity.Property(e => e.RestauranteId).IsRequired();
             entity.Property(e => e.CreatedAt).IsRequired();
-            entity.HasIndex(e => e.OrderId).IsUnique();
+
+            // Un pedido solo puede recibir un feedback Nivel 1
+            entity.HasIndex(e => e.PedidoId).IsUnique();
+            entity.HasIndex(e => e.RestauranteId);
+            entity.HasIndex(e => e.RepartidorId);
+
+            // Restricciones del plan técnico: ratings entre 1 y 5
+            entity.ToTable("feedback_encuestas", t =>
+            {
+                t.HasCheckConstraint("CK_feedback_encuestas_rating_comida", "\"RatingGeneralComida\" BETWEEN 1 AND 5");
+                t.HasCheckConstraint("CK_feedback_encuestas_rating_repartidor", "\"RatingServicioRepartidor\" BETWEEN 1 AND 5");
+            });
         });
 
-        modelBuilder.Entity<FeedbackRating>(entity =>
+        modelBuilder.Entity<PedidoReplicado>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.FeedbackId).IsRequired();
-            entity.Property(e => e.Criteria).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Score).IsRequired();
-            entity.HasOne(e => e.Feedback)
-                .WithMany(f => f.Ratings)
-                .HasForeignKey(e => e.FeedbackId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(e => e.PedidoId).IsRequired();
+            entity.Property(e => e.Codigo).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Estado).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Total).HasPrecision(18, 2);
+
+            // Idempotencia de la proyección: un pedido, una fila
+            entity.HasIndex(e => e.PedidoId).IsUnique();
+            entity.HasIndex(e => e.Estado);
+            entity.HasIndex(e => e.RestauranteId);
         });
     }
-}
-
-public class Feedback
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid OrderId { get; set; }
-    public Guid CustomerId { get; set; }
-    public string? Comment { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public List<FeedbackRating> Ratings { get; set; } = new();
-}
-
-public class FeedbackRating
-{
-    public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid FeedbackId { get; set; }
-    public string Criteria { get; set; } = string.Empty;
-    public int Score { get; set; }
-    public Feedback? Feedback { get; set; }
 }

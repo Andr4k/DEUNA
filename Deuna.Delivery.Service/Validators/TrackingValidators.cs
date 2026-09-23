@@ -1,0 +1,22 @@
+using Deuna.Delivery.Service.DTOs;
+using FluentValidation;
+
+namespace Deuna.Delivery.Service.Validators;
+
+public class ActualizarUbicacionRequestValidator : AbstractValidator<ActualizarUbicacionRequest>
+{
+    public ActualizarUbicacionRequestValidator()
+    {
+        RuleFor(x => x.RiderId)
+            .NotEmpty().WithMessage("El riderId es obligatorio");
+
+        RuleFor(x => x.Latitude)
+            .InclusiveBetween(-90, 90).WithMessage("La latitud debe estar entre -90 y 90");
+
+        RuleFor(x => x.Longitude)
+            .InclusiveBetween(-180, 180).WithMessage("La longitud debe estar entre -180 y 180");
+
+        RuleFor(x => x.Timestamp)
+            .NotEmpty().WithMessage("El timestamp es obligatorio");
+    }
+}

@@ -1,7 +1,8 @@
 using System.Security.Cryptography;
 using Deuna.Orders.Service.Models;
 using Deuna.Orders.Service.DTOs;
-using Deuna.Orders.Service.Events;
+using Deuna.Shared.Events;
+using Deuna.Shared.Security;
 using Deuna.Shared.Extensions;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -48,13 +49,24 @@ public class PedidoService : IPedidoService
         var clienteId = httpContext.GetUserId() ?? throw new UnauthorizedAccessException("Usuario no autenticado");
         var rol = httpContext.GetRole();
 
-        if (rol != "RESTAURANT")
+        if (rol != Roles.Restaurant)
         {
             throw new UnauthorizedAccessException("Solo los restaurantes pueden crear pedidos");
         }
 
+        // Aislamiento entre restaurantes: el alta solo puede operar sobre el restaurante
+        // del token, con la misma regla que ya aplica la consulta por restaurante.
+        // Sin esto, cualquier restaurante podía crear pedidos a nombre de otro.
+        if (!string.Equals(rol, Roles.Admin, StringComparison.OrdinalIgnoreCase) && clienteId != request.RestauranteId)
+        {
+            throw new UnauthorizedAccessException("Un restaurante solo puede crear pedidos para sí mismo");
+        }
+
         // Verificar que el restaurante existe y está activo
+        // Include obligatorio: EstaEnHorarioAtencion lee restaurante.HorariosAtencion;
+        // sin la navegación cargada la colección llega vacía y todo pedido se rechaza con 400.
         var restaurante = await _db.RestaurantesReplicados
+            .Include(r => r.HorariosAtencion)
             .FirstOrDefaultAsync(r => r.Id == request.RestauranteId && r.Activo && r.AceptaPedidos);
 
         if (restaurante == null)
@@ -182,7 +194,10 @@ public class PedidoService : IPedidoService
             Total: pedido.Total,
             Estado: pedido.Estado,
             QrCodigo: pedido.QrCodigo,
-            OccurredAt: DateTime.UtcNow
+            OccurredAt: DateTime.UtcNow,
+            // Punto de entrega para el tracking geoespacial de Delivery
+            Latitud: (double)request.DireccionEntrega.Latitud,
+            Longitud: (double)request.DireccionEntrega.Longitud
         );
 
         await _publishEndpoint.Publish(evento);

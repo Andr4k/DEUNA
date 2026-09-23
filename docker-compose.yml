@@ -149,10 +149,15 @@ services:
       Jwt__SecretKey: "DeunaSuperSecretKey2026!@#$%^&*()_+-=[]{}|;:,.<>?"
       Jwt__Issuer: "Deuna.Identity"
       Jwt__Audience: "Deuna.Api"
-      Yarp__Clusters__identity__Destination__Address: "http://identity:8080"
-      Yarp__Clusters__orders__Destination__Address: "http://orders:8080"
-      Yarp__Clusters__delivery__Destination__Address: "http://delivery:8080"
-      Yarp__Clusters__feedback__Destination__Address: "http://feedback:8080"
+      # Destinos de los clusters del proxy. En appsettings.json apuntan a
+      # http://localhost:500X, que dentro del contenedor del gateway no existe (los
+      # servicios escuchan en <servicio>:8080 en la red de Docker). Las claves deben
+      # colgar de `ReverseProxy`, que es la sección que enlaza YARP: las anteriores
+      # (`Yarp__Clusters__*`, en singular) no se leían nunca y todas las rutas daban 502.
+      ReverseProxy__Clusters__identity-cluster__Destinations__identity-service__Address: "http://identity:8080"
+      ReverseProxy__Clusters__orders-cluster__Destinations__orders-service__Address: "http://orders:8080"
+      ReverseProxy__Clusters__delivery-cluster__Destinations__delivery-service__Address: "http://delivery:8080"
+      ReverseProxy__Clusters__feedback-cluster__Destinations__feedback-service__Address: "http://feedback:8080"
     depends_on:
       postgres-identity:
         condition: service_healthy
@@ -203,6 +208,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://+:8080"
       ConnectionStrings__DefaultConnection: "Host=postgres-orders;Port=5432;Database=deuna_orders;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      Jwt__SecretKey: "DeunaSuperSecretKey2026!@#$%^&*()_+-=[]{}|;:,.<>?"
+      Jwt__Issuer: "Deuna.Identity"
+      Jwt__Audience: "Deuna.Api"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Port: 5672
       RabbitMQ__Username: ${RABBITMQ_USER:-deuna}
@@ -230,6 +238,10 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://+:8080"
       ConnectionStrings__DefaultConnection: "Host=postgres-delivery;Port=5432;Database=deuna_delivery;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      Jwt__SecretKey: "DeunaSuperSecretKey2026!@#$%^&*()_+-=[]{}|;:,.<>?"
+      Jwt__Issuer: "Deuna.Identity"
+      Jwt__Audience: "Deuna.Api"
+      Redis__Configuration: "redis:6379,password=${REDIS_PASSWORD:-redis_dev_2026}"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Port: 5672
       RabbitMQ__Username: ${RABBITMQ_USER:-deuna}

@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using Deuna.Orders.Service;
 using Deuna.Orders.Service.DTOs;
 using Deuna.Orders.Service.Models;
-using Deuna.Orders.Service.Events;
+using Deuna.Shared.Events;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;

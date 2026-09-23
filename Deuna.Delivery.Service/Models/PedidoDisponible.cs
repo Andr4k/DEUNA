@@ -45,6 +45,13 @@ public class PedidoDisponible
     /// <summary>CorrelationId del mensaje que originó el registro (trazabilidad).</summary>
     public Guid? CorrelationId { get; set; }
 
+    /// <summary>
+    /// Punto de entrega del pedido (WGS84). Origen de las consultas geoespaciales de
+    /// tracking: sin él no se puede ubicar al repartidor respecto del destino.
+    /// </summary>
+    public double? Latitud { get; set; }
+    public double? Longitud { get; set; }
+
     public Guid? RepartidorId { get; set; }
     public DateTime? AsignadoAt { get; set; }
 

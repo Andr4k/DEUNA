@@ -1,3 +1,4 @@
+using Deuna.Shared.Security;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 
@@ -69,15 +70,15 @@ public static class HttpContextExtensions
     /// <summary>
     /// Verifica si el usuario es Restaurant.
     /// </summary>
-    public static bool IsRestaurant(this HttpContext context) => context.HasRole("RESTAURANT");
+    public static bool IsRestaurant(this HttpContext context) => context.HasRole(Roles.Restaurant);
 
     /// <summary>
     /// Verifica si el usuario es Rider.
     /// </summary>
-    public static bool IsRider(this HttpContext context) => context.HasRole("RIDER");
+    public static bool IsRider(this HttpContext context) => context.HasRole(Roles.Rider);
 
     /// <summary>
     /// Verifica si el usuario es Admin.
     /// </summary>
-    public static bool IsAdmin(this HttpContext context) => context.HasRole("ADMIN");
+    public static bool IsAdmin(this HttpContext context) => context.HasRole(Roles.Admin);
 }
