@@ -43,7 +43,8 @@ public class PedidoProjectionTests : IDisposable
         RestauranteId: Guid.NewGuid(),
         Total: 55000m,
         Estado: "Pendiente",
-        QrCodigo: Guid.NewGuid().ToString("N"),
+        TokenQrLocal: Guid.NewGuid().ToString("N"),
+        TokenQrEntrega: Guid.NewGuid().ToString("N"),
         OccurredAt: DateTime.UtcNow);
 
     [Fact]

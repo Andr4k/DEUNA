@@ -43,8 +43,12 @@ public class Pedido
     public Guid DireccionEntregaId { get; set; }
 
     [Required]
-    [MaxLength(20)]
-    public string QrCodigo { get; set; } = string.Empty; // UUID para QR
+    [MaxLength(36)]
+    public string TokenQrLocal { get; set; } = string.Empty; // UUID v4: lo muestra el restaurante
+
+    [Required]
+    [MaxLength(36)]
+    public string TokenQrEntrega { get; set; } = string.Empty; // UUID v4: lo muestra el domiciliario
 
     [MaxLength(500)]
     public string? NotasCliente { get; set; }

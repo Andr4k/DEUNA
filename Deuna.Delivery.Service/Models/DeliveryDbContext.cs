@@ -28,7 +28,8 @@ public class DeliveryDbContext : DbContext
             entity.Property(e => e.RestauranteId).IsRequired();
             entity.Property(e => e.Total).HasPrecision(18, 2);
             entity.Property(e => e.Estado).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.QrCodigo).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.TokenQrLocal).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.TokenQrEntrega).IsRequired().HasMaxLength(64);
             entity.Property(e => e.FechaCreacion).IsRequired();
 
             // Un pedido de Orders se proyecta una sola vez (idempotencia ante redelivery).

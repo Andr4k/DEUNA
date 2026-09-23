@@ -90,7 +90,8 @@ public class AsignacionServiceTests : IDisposable
             RestauranteId = Guid.NewGuid(),
             Total = 55000m,
             Estado = estado,
-            QrCodigo = Guid.NewGuid().ToString("N"),
+            TokenQrLocal = Guid.NewGuid().ToString("N"),
+            TokenQrEntrega = Guid.NewGuid().ToString("N"),
             Latitud = LatPedido,
             Longitud = LonPedido,
             RepartidorId = repartidorId

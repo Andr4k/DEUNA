@@ -56,7 +56,8 @@ public class TrackingEndpointsTests : IAsyncLifetime
             RestauranteId = Guid.NewGuid(),
             Total = 55000m,
             Estado = PedidoDisponible.EstadoBuscando,
-            QrCodigo = Guid.NewGuid().ToString("N"),
+            TokenQrLocal = Guid.NewGuid().ToString("N"),
+            TokenQrEntrega = Guid.NewGuid().ToString("N"),
             Latitud = latitud,
             Longitud = longitud,
             RepartidorId = repartidorId

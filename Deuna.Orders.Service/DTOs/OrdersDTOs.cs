@@ -54,7 +54,8 @@ public record CrearContactoPedidoRequest(
 public record CrearPedidoResponse(
     Guid PedidoId,
     string Codigo,
-    string QrCodigo,
+    /// <summary>Token que el restaurante muestra en su app para que el domiciliario lo escanee.</summary>
+    string TokenQrLocal,
     string Estado,
     decimal Subtotal,
     decimal CostoEnvio,
@@ -75,7 +76,11 @@ public record PedidoResponse(
     decimal CostoEnvio,
     decimal Total,
     DireccionEntregaResponse DireccionEntrega,
-    string QrCodigo,
+    /// <summary>
+    /// Solo el token del local: es el que el restaurante muestra. El token de entrega lo
+    /// muestra el domiciliario, y le llega por Delivery (GET /my-orders), no por acá.
+    /// </summary>
+    string TokenQrLocal,
     string? NotasCliente,
     string? NotasRestaurante,
     DateTime FechaCreacion,

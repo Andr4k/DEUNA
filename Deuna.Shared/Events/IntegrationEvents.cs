@@ -14,8 +14,13 @@ namespace Deuna.Shared.Events;
 /// </summary>
 
 /// <summary>
-/// Publicado por Orders cuando un pedido se crea exitosamente. Contrato v1.
+/// Publicado por Orders cuando un pedido se crea exitosamente. Contrato v2.
 /// Consumido por Delivery (proyección de pedidos disponibles).
+///
+/// v2 (TASK-304): el token QR único se separó en los dos que exige FR-002.5. No son
+/// intercambiables y pertenecen a partes distintas: el del local lo muestra el restaurante
+/// y lo escanea el domiciliario al llegar; el de entrega lo muestra el domiciliario y lo
+/// escanea el cliente al recibir.
 /// </summary>
 public record PedidoCreado(
     Guid PedidoId,
@@ -24,7 +29,8 @@ public record PedidoCreado(
     Guid RestauranteId,
     decimal Total,
     string Estado,
-    string QrCodigo,
+    string TokenQrLocal,
+    string TokenQrEntrega,
     DateTime OccurredAt,
     // Punto de entrega. Aditivo y nullable para no romper mensajes v1 ya encolados:
     // Delivery lo usa como origen del GEOSEARCH de tracking (FR-003.3).
