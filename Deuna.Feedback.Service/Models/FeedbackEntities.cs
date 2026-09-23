@@ -84,3 +84,36 @@ public class PedidoReplicado
     public const string EstadoEntregado = "Entregado";
     public const string EstadoCancelado = "Cancelado";
 }
+
+/// <summary>
+/// Proyección local (read-model) de los repartidores registrados en Identity.
+/// Se alimenta consumiendo <c>RepartidorRegistrado</c>.
+///
+/// La encuesta guarda a qué repartidor se califica (US-004.1); sin esta réplica el
+/// identificador llega sin perfil detrás y el restaurante no puede saber a quién
+/// corresponde la calificación.
+/// </summary>
+[Table("repartidores_replicados")]
+public class RepartidorReplicado
+{
+    [Key]
+    public Guid Id { get; set; } // Mismo Id que en Identity
+
+    [Required]
+    [MaxLength(200)]
+    public string NombreCompleto { get; set; } = string.Empty;
+
+    [MaxLength(50)]
+    public string? DocumentoIdentidad { get; set; }
+
+    [MaxLength(100)]
+    public string? CiudadOperacion { get; set; }
+
+    [MaxLength(500)]
+    public string? FotoPerfilUrl { get; set; }
+
+    public bool Activo { get; set; } = true;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+}

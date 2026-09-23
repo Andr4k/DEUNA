@@ -45,6 +45,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<PedidoCreadoConsumer>();
     x.AddConsumer<PedidoAsignadoConsumer>();
     x.AddConsumer<PedidoActualizadoConsumer>();
+    x.AddConsumer<RepartidorRegistradoConsumer>();
 
     if (useInMemory)
     {

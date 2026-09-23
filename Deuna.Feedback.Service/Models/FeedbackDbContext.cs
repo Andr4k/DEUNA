@@ -12,6 +12,9 @@ public class FeedbackDbContext : DbContext
     /// <summary>Read-model de pedidos replicados desde Orders por eventos.</summary>
     public DbSet<PedidoReplicado> PedidosReplicados => Set<PedidoReplicado>();
 
+    /// <summary>Read-model de repartidores replicados desde Identity por eventos.</summary>
+    public DbSet<RepartidorReplicado> RepartidoresReplicados => Set<RepartidorReplicado>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -48,6 +51,18 @@ public class FeedbackDbContext : DbContext
             entity.HasIndex(e => e.PedidoId).IsUnique();
             entity.HasIndex(e => e.Estado);
             entity.HasIndex(e => e.RestauranteId);
+        });
+
+        modelBuilder.Entity<RepartidorReplicado>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.NombreCompleto).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.DocumentoIdentidad).HasMaxLength(50);
+            entity.Property(e => e.CiudadOperacion).HasMaxLength(100);
+            entity.Property(e => e.FotoPerfilUrl).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).IsRequired();
+
+            entity.HasIndex(e => e.Activo);
         });
     }
 }
