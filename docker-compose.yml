@@ -233,6 +233,10 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://+:8080"
       ConnectionStrings__DefaultConnection: "Host=postgres-delivery;Port=5432;Database=deuna_delivery;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      Jwt__SecretKey: "DeunaSuperSecretKey2026!@#$%^&*()_+-=[]{}|;:,.<>?"
+      Jwt__Issuer: "Deuna.Identity"
+      Jwt__Audience: "Deuna.Api"
+      Redis__Configuration: "redis:6379,password=${REDIS_PASSWORD:-redis_dev_2026}"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Port: 5672
       RabbitMQ__Username: ${RABBITMQ_USER:-deuna}

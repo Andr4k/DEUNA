@@ -185,7 +185,10 @@ public class PedidoService : IPedidoService
             Total: pedido.Total,
             Estado: pedido.Estado,
             QrCodigo: pedido.QrCodigo,
-            OccurredAt: DateTime.UtcNow
+            OccurredAt: DateTime.UtcNow,
+            // Punto de entrega para el tracking geoespacial de Delivery
+            Latitud: (double)request.DireccionEntrega.Latitud,
+            Longitud: (double)request.DireccionEntrega.Longitud
         );
 
         await _publishEndpoint.Publish(evento);

@@ -25,7 +25,11 @@ public record PedidoCreado(
     decimal Total,
     string Estado,
     string QrCodigo,
-    DateTime OccurredAt
+    DateTime OccurredAt,
+    // Punto de entrega. Aditivo y nullable para no romper mensajes v1 ya encolados:
+    // Delivery lo usa como origen del GEOSEARCH de tracking (FR-003.3).
+    double? Latitud = null,
+    double? Longitud = null
 );
 
 /// <summary>
