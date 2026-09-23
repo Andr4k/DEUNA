@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Deuna.Orders.Service.Models;
 using Deuna.Orders.Service.DTOs;
 using Deuna.Shared.Events;
+using Deuna.Shared.Security;
 using Deuna.Shared.Extensions;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -48,9 +49,17 @@ public class PedidoService : IPedidoService
         var clienteId = httpContext.GetUserId() ?? throw new UnauthorizedAccessException("Usuario no autenticado");
         var rol = httpContext.GetRole();
 
-        if (rol != "RESTAURANT")
+        if (rol != Roles.Restaurant)
         {
             throw new UnauthorizedAccessException("Solo los restaurantes pueden crear pedidos");
+        }
+
+        // Aislamiento entre restaurantes: el alta solo puede operar sobre el restaurante
+        // del token, con la misma regla que ya aplica la consulta por restaurante.
+        // Sin esto, cualquier restaurante podía crear pedidos a nombre de otro.
+        if (!string.Equals(rol, Roles.Admin, StringComparison.OrdinalIgnoreCase) && clienteId != request.RestauranteId)
+        {
+            throw new UnauthorizedAccessException("Un restaurante solo puede crear pedidos para sí mismo");
         }
 
         // Verificar que el restaurante existe y está activo

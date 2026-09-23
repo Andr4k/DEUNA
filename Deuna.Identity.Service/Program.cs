@@ -3,6 +3,7 @@ using Deuna.Identity.Service.Endpoints;
 using Deuna.Identity.Service.Models;
 using Deuna.Identity.Service.Services;
 using Deuna.Shared.Extensions;
+using Deuna.Shared.Messaging;
 using FluentValidation;
 using MassTransit;
 using Microsoft.AspNetCore.RateLimiting;
@@ -77,7 +78,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // Register Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
+var rabbitUri = RabbitMqConnection.BuildUri(builder.Configuration);
 var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
 
 builder.Services.AddHealthChecks()
@@ -88,7 +89,7 @@ if (!useInMemory)
     builder.Services.AddHealthChecks()
         .AddRabbitMQ(sp => 
         {
-            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = new Uri(rabbitConn) };
+            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = rabbitUri };
             return factory.CreateConnectionAsync().GetAwaiter().GetResult();
         });
 }
@@ -96,6 +97,9 @@ if (!useInMemory)
 // Rate limiting: 5 requests per minute per IP for login (always register services, disable in test)
 builder.Services.AddRateLimiter(options =>
 {
+    // 429 es la semántica correcta para "demasiadas peticiones"; el default de ASP.NET es 503.
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
     var isTestEnvironment = builder.Environment.IsEnvironment("Testing") || 
         builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
     

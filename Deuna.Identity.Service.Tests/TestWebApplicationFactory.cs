@@ -8,25 +8,40 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Deuna.Identity.Service.Tests;
 
+/// <summary>
+/// Arranca Identity con EF InMemory y transporte InMemory de MassTransit.
+///
+/// Los flags se inyectan por variables de entorno (no con ConfigureAppConfiguration):
+/// Program.cs los lee en las sentencias de nivel superior, antes de que WebApplicationFactory
+/// aplique su colección de configuración. Con ConfigureAppConfiguration el flag llegaba tarde,
+/// el servicio arrancaba con el transporte de RabbitMQ (`guest@localhost`) y los tests pasaban
+/// solo porque ningún camino publicaba eventos todavía.
+/// </summary>
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
+    private const string JwtSecret = "TestSecretKeyForTestingPurposesOnly123456789";
+
+    public TestWebApplicationFactory()
+    {
+        Environment.SetEnvironmentVariable("UseInMemoryDatabase", "true");
+        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", "InMemory");
+        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Testing");
+        Environment.SetEnvironmentVariable("Jwt__SecretKey", JwtSecret);
+        Environment.SetEnvironmentVariable("Jwt__Issuer", "Deuna.Test");
+        Environment.SetEnvironmentVariable("Jwt__Audience", "Deuna.Test");
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-        
+
         builder.ConfigureAppConfiguration((context, config) =>
         {
-            // Override configuration to use InMemory database
             var inMemorySettings = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = "InMemory",
                 ["UseInMemoryDatabase"] = "true",
-                ["RabbitMQ:Host"] = "localhost",
-                ["RabbitMQ:Port"] = "5672",
-                ["RabbitMQ:Username"] = "guest",
-                ["RabbitMQ:Password"] = "guest",
-                ["RabbitMQ:VirtualHost"] = "/",
-                ["Jwt:SecretKey"] = "TestSecretKeyForTestingPurposesOnly123456789",
+                ["Jwt:SecretKey"] = JwtSecret,
                 ["Jwt:Issuer"] = "Deuna.Test",
                 ["Jwt:Audience"] = "Deuna.Test",
             };
@@ -35,24 +50,27 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // Remove existing DbContext registration
-            var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<IdentityDbContext>));
-            if (descriptor != null) services.Remove(descriptor);
-
-            // Remove Npgsql-related options
-            var npgsqlDescriptors = services.Where(d => 
+            // El DbContext ya lo registra Program.cs en modo InMemory; se garantiza que no
+            // quede ningún descriptor de Npgsql apuntando a una base real.
+            var npgsqlDescriptors = services.Where(d =>
                 d.ServiceType.FullName?.Contains("Npgsql") == true ||
                 d.ServiceType.FullName?.Contains("MigrationsAssembly") == true
             ).ToList();
             foreach (var d in npgsqlDescriptors) services.Remove(d);
-
-            // Add InMemory database for testing
-            services.AddDbContext<IdentityDbContext>(options =>
-            {
-                options.UseInMemoryDatabase("TestIdentityDb");
-            });
-            
-            // DO NOT BuildServiceProvider here - let WebApplicationFactory do it
         });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        if (disposing)
+        {
+            Environment.SetEnvironmentVariable("UseInMemoryDatabase", null);
+            Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", null);
+            Environment.SetEnvironmentVariable("Jwt__SecretKey", null);
+            Environment.SetEnvironmentVariable("Jwt__Issuer", null);
+            Environment.SetEnvironmentVariable("Jwt__Audience", null);
+        }
     }
 }

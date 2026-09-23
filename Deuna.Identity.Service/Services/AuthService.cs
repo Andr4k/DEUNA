@@ -7,7 +7,9 @@ using Deuna.Identity.Service.DTOs;
 using Deuna.Identity.Service.Models;
 using Deuna.Identity.Service.Models.Domain;
 using Deuna.Shared.Extensions;
+using Deuna.Shared.Events;
 using Deuna.Shared.Security;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -34,12 +36,14 @@ public class AuthService : IAuthService
 {
     private readonly IdentityDbContext _db;
     private readonly IConfiguration _config;
+    private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(IdentityDbContext db, IConfiguration config, ILogger<AuthService> logger)
+    public AuthService(IdentityDbContext db, IConfiguration config, IPublishEndpoint publishEndpoint, ILogger<AuthService> logger)
     {
         _db = db;
         _config = config;
+        _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
 
@@ -95,6 +99,31 @@ public class AuthService : IAuthService
 
         await _db.SaveChangesAsync();
 
+        // Token de verificación de email. Se PERSISTE: antes se generaba al construir la
+        // respuesta y se descartaba, así que verify-email nunca podía validarlo.
+        var verificationToken = GenerateSecureToken();
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            UsuarioId = user.Id,
+            Token = verificationToken,
+            ExpiresAt = DateTime.UtcNow.AddHours(24),
+            CreatedByIp = "register"
+        });
+        await _db.SaveChangesAsync();
+
+        // Replicación por eventos: los servicios que operan pedidos necesitan conocer al
+        // restaurante para poder validarlo (ADR-005).
+        await _publishEndpoint.Publish(new RestauranteRegistrado(
+            RestauranteId: user.Id,
+            NombreComercial: request.NombreComercial,
+            RazonSocial: request.RazonSocial,
+            Nit: request.Nit,
+            DireccionSede: request.DireccionSede,
+            Ciudad: request.Ciudad,
+            Latitud: (double)request.Latitud,
+            Longitud: (double)request.Longitud,
+            OccurredAt: DateTime.UtcNow));
+
         _logger.LogInformation("Restaurante registrado: {Email}", request.Email);
 
         return new AuthResponse(true, "Registro exitoso. Verifique su email.", new
@@ -102,7 +131,7 @@ public class AuthService : IAuthService
             UserId = user.Id,
             Email = user.Email,
             Role = Roles.Restaurant,
-            VerificationToken = GenerateSecureToken()
+            VerificationToken = verificationToken
         });
     }
 

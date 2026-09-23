@@ -3,6 +3,7 @@ using Deuna.Delivery.Service.Endpoints;
 using Deuna.Delivery.Service.Models;
 using Deuna.Delivery.Service.Services;
 using Deuna.Shared.Extensions;
+using Deuna.Shared.Messaging;
 using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -60,23 +61,19 @@ builder.Services.AddMassTransit(x =>
     {
         x.UsingInMemory((context, cfg) =>
         {
-            cfg.ConfigureEndpoints(context);
+            cfg.ConfigureEndpoints(context, new KebabCaseEndpointNameFormatter("delivery", false));
         });
         return;
     }
 
     x.UsingRabbitMq((context, cfg) =>
     {
-        var host = builder.Configuration["RabbitMQ:Host"] ?? "localhost";
-        var port = builder.Configuration.GetValue<int>("RabbitMQ:Port", 5672);
-        var username = builder.Configuration["RabbitMQ:Username"] ?? "deuna";
-        var password = builder.Configuration["RabbitMQ:Password"] ?? "rabbitmq_dev_2026";
-        var vhost = builder.Configuration["RabbitMQ:VirtualHost"] ?? "deuna";
+        cfg.Host(RabbitMqConnection.BuildUri(builder.Configuration));
 
-        var uri = new Uri($"amqp://{username}:{password}@{host}:{port}/{vhost}");
-        cfg.Host(uri);
-
-        cfg.ConfigureEndpoints(context);
+        // Prefijo por servicio en los nombres de cola. Sin esto, todos los servicios que
+        // consumen el mismo tipo de mensaje comparten la MISMA cola (MassTransit la nombra
+        // con el tipo) y se roban los eventos entre sí: cada mensaje lo recibe uno solo.
+        cfg.ConfigureEndpoints(context, new KebabCaseEndpointNameFormatter("delivery", false));
     });
 });
 
@@ -89,7 +86,7 @@ builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 builder.Services.AddScoped<ITrackingStore, RedisTrackingStore>();
 builder.Services.AddScoped<ITrackingService, TrackingService>();
 
-var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
+var rabbitUri = RabbitMqConnection.BuildUri(builder.Configuration);
 var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
 
 builder.Services.AddHealthChecks()
@@ -101,7 +98,9 @@ if (!useInMemory)
         .AddRedis(redisConn)
         .AddRabbitMQ(sp =>
         {
-            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = new Uri(rabbitConn) };
+            // Se usa la URI real de configuración: el placeholder con contraseña enmascarada
+            // y host localhost hacía que el health check fallara siempre dentro del contenedor.
+            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = rabbitUri };
             return factory.CreateConnectionAsync().GetAwaiter().GetResult();
         });
 }
