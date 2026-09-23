@@ -52,6 +52,8 @@ builder.Services.AddMassTransit(x =>
 {
     // Replicación de restaurantes desde Identity (necesaria para validar sus pedidos)
     x.AddConsumer<RestauranteRegistradoConsumer>();
+    // Cierra el pedido cuando Delivery confirma la entrega (TASK-305).
+    x.AddConsumer<PedidoEntregadoConsumer>();
 
     if (useInMemoryMessaging)
     {
