@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Deuna.Orders.Service.Models;
 using Deuna.Orders.Service.DTOs;
+using Deuna.Shared.Domain;
 using Deuna.Shared.Events;
 using Deuna.Shared.Security;
 using Deuna.Shared.Extensions;
@@ -134,7 +135,7 @@ public class PedidoService : IPedidoService
             ClienteId = clienteId,
             RestauranteId = request.RestauranteId,
             Codigo = codigo,
-            Estado = "Pendiente",
+            Estado = EstadosPedido.Buscando,
             Subtotal = subtotal,
             CostoEnvio = tarifa.TotalCalculado,
             Total = subtotal + tarifa.TotalCalculado,

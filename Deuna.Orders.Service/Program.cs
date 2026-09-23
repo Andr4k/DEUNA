@@ -54,6 +54,9 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<RestauranteRegistradoConsumer>();
     // Cierra el pedido cuando Delivery confirma la entrega (TASK-305).
     x.AddConsumer<PedidoEntregadoConsumer>();
+    // Mantiene el estado del pedido al día con el ciclo de entrega (TASK-308).
+    x.AddConsumer<PedidoAsignadoConsumer>();
+    x.AddConsumer<PedidoActualizadoConsumer>();
 
     if (useInMemoryMessaging)
     {
