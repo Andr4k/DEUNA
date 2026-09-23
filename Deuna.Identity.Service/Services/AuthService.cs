@@ -7,6 +7,7 @@ using Deuna.Identity.Service.DTOs;
 using Deuna.Identity.Service.Models;
 using Deuna.Identity.Service.Models.Domain;
 using Deuna.Shared.Extensions;
+using Deuna.Shared.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -100,7 +101,7 @@ public class AuthService : IAuthService
         {
             UserId = user.Id,
             Email = user.Email,
-            Role = "Restaurant",
+            Role = Roles.Restaurant,
             VerificationToken = GenerateSecureToken()
         });
     }
@@ -164,7 +165,7 @@ public class AuthService : IAuthService
         {
             UserId = user.Id,
             Email = user.Email,
-            Role = "Courier",
+            Role = Roles.Rider,
             VerificationToken = GenerateSecureToken()
         });
     }
@@ -203,10 +204,10 @@ public class AuthService : IAuthService
         _db.Usuarios.Add(user);
         await _db.SaveChangesAsync();
 
-        // Create profile based on role
-        switch (request.Role)
+        // Create profile based on role (roles canónicos de Deuna.Shared.Security.Roles)
+        switch (request.Role?.ToUpperInvariant())
         {
-            case "Restaurant":
+            case Roles.Restaurant:
                 _db.PerfilesRestaurante.Add(new PerfilRestaurante
                 {
                     UsuarioId = user.Id,
@@ -215,7 +216,8 @@ public class AuthService : IAuthService
                     AceptaPedidos = false // Until profile is completed
                 });
                 break;
-            case "Courier":
+            case Roles.Rider:
+            case "COURIER":
                 _db.PerfilesRepartidor.Add(new PerfilRepartidor
                 {
                     UsuarioId = user.Id,
@@ -223,7 +225,7 @@ public class AuthService : IAuthService
                     Disponible = false
                 });
                 break;
-            case "Admin":
+            case Roles.Admin:
                 _db.PerfilesAdministrador.Add(new PerfilAdministrador
                 {
                     UsuarioId = user.Id,
@@ -285,7 +287,7 @@ public class AuthService : IAuthService
 
         // Get role
         var role = GetUserRole(user);
-        if (role == "Admin" && user.PerfilAdministrador?.Activo != true)
+        if (role == Roles.Admin && user.PerfilAdministrador?.Activo != true)
         {
             return new AuthResponse(false, "Perfil de administrador inactivo");
         }
@@ -638,10 +640,10 @@ public class AuthService : IAuthService
 
     private string GetUserRole(Usuario user)
     {
-        if (user.PerfilAdministrador != null) return "Admin";
-        if (user.PerfilRestaurante != null) return "Restaurant";
-        if (user.PerfilRepartidor != null) return "Courier";
-        return "Customer";
+        if (user.PerfilAdministrador != null) return Roles.Admin;
+        if (user.PerfilRestaurante != null) return Roles.Restaurant;
+        if (user.PerfilRepartidor != null) return Roles.Rider;
+        return Roles.Customer;
     }
 
     private bool IsDevelopment()

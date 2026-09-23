@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Deuna.Shared.Middleware;
+using Deuna.Shared.Security;
 using System.Security.Claims;
 using System.Text;
 
@@ -57,9 +58,9 @@ public static class ServiceCollectionExtensions
 
         services.AddAuthorization(options =>
         {
-            options.AddPolicy("restaurant", policy => policy.RequireRole("RESTAURANT"));
-            options.AddPolicy("rider", policy => policy.RequireRole("RIDER"));
-            options.AddPolicy("admin", policy => policy.RequireRole("ADMIN"));
+            options.AddPolicy("restaurant", policy => policy.RequireRole(Roles.Restaurant));
+            options.AddPolicy("rider", policy => policy.RequireRole(Roles.Rider));
+            options.AddPolicy("admin", policy => policy.RequireRole(Roles.Admin));
             options.AddPolicy("authenticated", policy => policy.RequireAuthenticatedUser());
         });
 
