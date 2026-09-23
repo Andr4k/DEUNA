@@ -23,8 +23,22 @@ Log.Information("Starting Deuna Orders Service");
 
 builder.Services.AddOpenApi();
 
+// Los flags se leen UNA sola vez y antes de registrar la base de datos.
+// El proveedor de BD y el transporte de mensajería son decisiones independientes:
+// los tests usan PostGIS real (Testcontainers) con mensajería en memoria, mientras
+// que producción usa Postgres + RabbitMQ. Registrar ambos proveedores de EF en el
+// mismo service provider es un error, por eso la elección es excluyente.
+var useInMemoryDatabase = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
+var useInMemoryMessaging = builder.Configuration.GetValue<bool>("UseInMemoryMessaging", false);
+
 builder.Services.AddDbContext<OrdersDbContext>(options =>
 {
+    if (useInMemoryDatabase)
+    {
+        options.UseInMemoryDatabase("OrdersTest");
+        return;
+    }
+
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
         ?? "Host=localhost;Port=5433;Database=deuna_orders;Username=deuna_user;Password=deuna_dev_2026";
     options.UseNpgsql(connectionString, npgsql =>
@@ -36,12 +50,10 @@ builder.Services.AddDbContext<OrdersDbContext>(options =>
 
 builder.Services.AddMassTransit(x =>
 {
-    var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
-
     // Replicación de restaurantes desde Identity (necesaria para validar sus pedidos)
     x.AddConsumer<RestauranteRegistradoConsumer>();
 
-    if (useInMemory)
+    if (useInMemoryMessaging)
     {
         x.UsingInMemory((context, cfg) =>
         {
@@ -73,12 +85,11 @@ builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 var rabbitUri = RabbitMqConnection.BuildUri(builder.Configuration);
-var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<OrdersDbContext>();
 
-if (!useInMemory)
+if (!useInMemoryMessaging)
 {
     builder.Services.AddHealthChecks()
         .AddRabbitMQ(sp =>
@@ -114,9 +125,10 @@ app.MapOrdersEndpoints();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
-    var useInMemoryDb = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
-    if (!useInMemoryDb)
+    if (!useInMemoryDatabase)
     {
+        // Migrate (no EnsureCreated) para que también se apliquen las funciones
+        // SQL de PostGIS (geo.distance_meters, geo.point_in_polygon).
         await db.Database.MigrateAsync();
     }
     else

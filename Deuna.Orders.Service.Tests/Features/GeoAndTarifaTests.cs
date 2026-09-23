@@ -114,29 +114,13 @@ public class TarifaServiceTests : IClassFixture<TestWebApplicationFactory>
         _factory = factory;
     }
 
-    private async Task SeedRestauranteAsync(OrdersDbContext db)
+    private static async Task ResetAndSeedAsync(OrdersDbContext db)
     {
-        var restaurante = new RestauranteReplicado
-        {
-            Id = Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
-            NombreComercial = "Demo Restaurant",
-            RazonSocial = "Demo Restaurant S.A.S.",
-            Nit = "900123456-7",
-            DireccionSede = "Calle 45 #23-10",
-            Ciudad = "Bogotá",
-            Latitud = 4.6097100m,
-            Longitud = -74.0817500m,
-            Ubicacion = new Point(-74.0817500, 4.6097100) { SRID = 4326 },
-            RadioCoberturaKm = 10.0m,
-            AceptaPedidos = true,
-            Activo = true,
-            HoraApertura = new TimeSpan(8, 0, 0),
-            HoraCierre = new TimeSpan(22, 0, 0),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        db.RestaurantesReplicados.Add(restaurante);
-        await db.SaveChangesAsync();
+        // Limpiar antes de sembrar: los tests de esta clase comparten la base y el
+        // restaurante tiene clave primaria fija, así que el segundo test chocaría
+        // con el registro del primero.
+        await TestData.ResetAsync(db);
+        await TestData.SeedRestauranteAsync(db);
     }
 
     [Fact]
@@ -147,17 +131,17 @@ public class TarifaServiceTests : IClassFixture<TestWebApplicationFactory>
         var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
         var tarifaService = scope.ServiceProvider.GetRequiredService<ITarifaService>();
 
-        await SeedRestauranteAsync(db);
+        await ResetAndSeedAsync(db);
 
         var items = new List<ItemPedido>
         {
             new() { NombreProducto = "Hamburguesa", Cantidad = 2, PrecioUnitario = 25000m, Subtotal = 50000m }
         };
 
-        // Act - punto a ~1.67 km del restaurante
+        // Act - punto a ~1.67 km al norte del restaurante (dentro del radio de 10 km)
         var tarifa = await tarifaService.CalcularTarifaAsync(
-            Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
-            4.6097100, -74.0817500, // Bogotá, cerca del restaurante
+            TestData.RestauranteId,
+            4.6247100, -74.0817500,
             50000m,
             items);
 
@@ -179,7 +163,7 @@ public class TarifaServiceTests : IClassFixture<TestWebApplicationFactory>
         var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
         var tarifaService = scope.ServiceProvider.GetRequiredService<ITarifaService>();
 
-        await SeedRestauranteAsync(db);
+        await ResetAndSeedAsync(db);
 
         var items = new List<ItemPedido>
         {
@@ -188,7 +172,7 @@ public class TarifaServiceTests : IClassFixture<TestWebApplicationFactory>
 
         // Act & Assert - Medellín está fuera del radio de 10km de Bogotá
         await tarifaService.Invoking(s => s.CalcularTarifaAsync(
-            Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
+            TestData.RestauranteId,
             6.2442, -75.5812, // Medellín
             25000m,
             items))
