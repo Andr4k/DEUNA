@@ -27,10 +27,14 @@ builder.Services.AddOpenApi();
 builder.Services.AddDbContext<IdentityDbContext>(options =>
 {
     var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
-    
+        
     if (useInMemory)
     {
-        options.UseInMemoryDatabase("TestIdentityDb");
+        // El nombre es configurable a propósito: EF InMemory mantiene UN almacén por
+        // nombre para todo el proceso, así que un nombre fijo hace que las clases de
+        // test compartan datos y que un EnsureDeleted de una borre lo de las demás.
+        var inMemoryName = builder.Configuration["InMemoryDatabaseName"] ?? "IdentityTest";
+        options.UseInMemoryDatabase(inMemoryName);
     }
     else
     {
@@ -74,6 +78,7 @@ builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 
 // Register Auth Service
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IAuthorizationCodeService, AuthorizationCodeService>();
 
 // Register Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();

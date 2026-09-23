@@ -60,6 +60,35 @@ public class RegisterRestaurantRequestValidator : AbstractValidator<RegisterRest
         RuleFor(x => x.Longitud)
             .NotEmpty().WithMessage("Longitud es requerida")
             .InclusiveBetween(-180, 180).WithMessage("Longitud inválida");
+
+        // Sin código de autorización validado no hay registro: la continuidad se prueba
+        // con el token que devuelve validate-code (FR-001.8 a FR-001.10).
+        RuleFor(x => x.ContinuidadToken)
+            .NotEmpty().WithMessage("El código de autorización es obligatorio para registrarse")
+            .MaximumLength(2048).WithMessage("Token de continuidad demasiado largo");
+    }
+}
+
+public class EmitAuthorizationCodeRequestValidator : AbstractValidator<EmitAuthorizationCodeRequest>
+{
+    public EmitAuthorizationCodeRequestValidator()
+    {
+        RuleFor(x => x.Notas)
+            .MaximumLength(200).WithMessage("Las notas no pueden superar los 200 caracteres");
+
+        RuleFor(x => x.VigenciaDias)
+            .InclusiveBetween(1, 365).When(x => x.VigenciaDias.HasValue)
+            .WithMessage("La vigencia debe estar entre 1 y 365 días");
+    }
+}
+
+public class ValidateAuthorizationCodeRequestValidator : AbstractValidator<ValidateAuthorizationCodeRequest>
+{
+    public ValidateAuthorizationCodeRequestValidator()
+    {
+        RuleFor(x => x.Codigo)
+            .NotEmpty().WithMessage("El código de autorización es obligatorio")
+            .MaximumLength(32).WithMessage("Código de autorización inválido");
     }
 }
 

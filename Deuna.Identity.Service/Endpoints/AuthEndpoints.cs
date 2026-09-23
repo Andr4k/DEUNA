@@ -4,6 +4,8 @@ using Deuna.Identity.Service.Validators;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace Deuna.Identity.Service.Endpoints;
 
@@ -19,6 +21,18 @@ public static class AuthEndpoints
             .WithName("RegisterRestaurant")
             .WithSummary("Registrar nuevo restaurante")
             .AllowAnonymous();
+
+        // Alta en dos pasos: primero se valida el código de autorización emitido por el
+        // área comercial y recién entonces se envían los datos (FR-001.8 a FR-001.10).
+        group.MapPost("/register/restaurant/validate-code", ValidateAuthorizationCodeAsync)
+            .WithName("ValidateAuthorizationCode")
+            .WithSummary("Validar el código de autorización emitido por el área comercial")
+            .AllowAnonymous();
+
+        group.MapPost("/authorization-codes", EmitAuthorizationCodeAsync)
+            .WithName("EmitAuthorizationCode")
+            .WithSummary("Emitir un código de autorización (área comercial)")
+            .RequireAuthorization("admin");
 
         group.MapPost("/register/rider", RegisterRiderAsync)
             .WithName("RegisterRider")
@@ -87,6 +101,45 @@ public static class AuthEndpoints
 
         var result = await authService.RegisterRestaurantAsync(request);
         return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+    }
+
+    private static async Task<IResult> ValidateAuthorizationCodeAsync(
+        [FromBody] ValidateAuthorizationCodeRequest request,
+        [FromServices] IAuthorizationCodeService authorizationCodes,
+        [FromServices] IValidator<ValidateAuthorizationCodeRequest> validator)
+    {
+        var validation = await validator.ValidateAsync(request);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new AuthResponse(false, "Datos inválidos", validation.Errors.Select(e => e.ErrorMessage)));
+        }
+
+        var result = await authorizationCodes.ValidateAsync(request.Codigo);
+        return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+    }
+
+    private static async Task<IResult> EmitAuthorizationCodeAsync(
+        [FromBody] EmitAuthorizationCodeRequest request,
+        [FromServices] IAuthorizationCodeService authorizationCodes,
+        [FromServices] IValidator<EmitAuthorizationCodeRequest> validator,
+        ClaimsPrincipal user)
+    {
+        var validation = await validator.ValidateAsync(request);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new AuthResponse(false, "Datos inválidos", validation.Errors.Select(e => e.ErrorMessage)));
+        }
+
+        var result = await authorizationCodes.EmitAsync(request, ObtenerUsuarioId(user));
+        return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+    }
+
+    /// <summary>Id del usuario autenticado, tolerando el mapeo de claims entrantes.</summary>
+    private static Guid? ObtenerUsuarioId(ClaimsPrincipal user)
+    {
+        var valor = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            ?? user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(valor, out var id) ? id : null;
     }
 
     private static async Task<IResult> RegisterRiderAsync(

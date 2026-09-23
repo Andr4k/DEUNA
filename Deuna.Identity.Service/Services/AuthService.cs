@@ -37,18 +37,34 @@ public class AuthService : IAuthService
     private readonly IdentityDbContext _db;
     private readonly IConfiguration _config;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IAuthorizationCodeService _authorizationCodes;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(IdentityDbContext db, IConfiguration config, IPublishEndpoint publishEndpoint, ILogger<AuthService> logger)
+    public AuthService(
+        IdentityDbContext db,
+        IConfiguration config,
+        IPublishEndpoint publishEndpoint,
+        IAuthorizationCodeService authorizationCodes,
+        ILogger<AuthService> logger)
     {
         _db = db;
         _config = config;
         _publishEndpoint = publishEndpoint;
+        _authorizationCodes = authorizationCodes;
         _logger = logger;
     }
 
     public async Task<AuthResponse> RegisterRestaurantAsync(RegisterRestaurantRequest request)
     {
+        // Primero el código de autorización: es obligatorio y no depende de los datos
+        // enviados (FR-001.8 a FR-001.10). Se valida antes de tocar la base para que un
+        // intento fallido por datos duplicados no consuma el código.
+        var continuidad = await _authorizationCodes.ValidateContinuityTokenAsync(request.ContinuidadToken);
+        if (!continuidad.Ok)
+        {
+            return new AuthResponse(false, continuidad.Message);
+        }
+
         var existingUser = await _db.Usuarios.FirstOrDefaultAsync(u => u.Email == request.Email);
         if (existingUser != null)
         {
@@ -98,6 +114,9 @@ public class AuthService : IAuthService
         });
 
         await _db.SaveChangesAsync();
+
+        // Un solo uso: el código queda ligado al restaurante que completó el alta.
+        await _authorizationCodes.ConsumeAsync(continuidad.CodigoId!.Value, user.Id);
 
         // Token de verificación de email. Se PERSISTE: antes se generaba al construir la
         // respuesta y se descartaba, así que verify-email nunca podía validarlo.
