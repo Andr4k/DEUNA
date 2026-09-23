@@ -115,4 +115,24 @@ public class PedidoProjectionTests : IDisposable
 
         (await _db.PedidosReplicados.CountAsync()).Should().Be(0);
     }
+    [Fact]
+    public async Task PedidoEntregado_MarcaElPedidoComoEntregado()
+    {
+        // Es el evento terminal (TASK-305) y el que habilita la encuesta: el feedback solo
+        // se acepta para pedidos Entregados.
+        var pedidoId = Guid.NewGuid();
+        await new PedidoCreadoConsumer(_db, NullLogger<PedidoCreadoConsumer>.Instance)
+            .Consume(Contexto(EventoPedidoCreado(pedidoId)));
+
+        var consumer = new PedidoEntregadoConsumer(_db, NullLogger<PedidoEntregadoConsumer>.Instance);
+        await consumer.Consume(Contexto(new PedidoEntregado(
+            PedidoId: pedidoId,
+            Codigo: "PED-20260923-000001",
+            RepartidorId: Guid.NewGuid(),
+            FechaEntrega: DateTime.UtcNow,
+            OccurredAt: DateTime.UtcNow)));
+
+        var pedido = await _db.PedidosReplicados.SingleAsync(p => p.PedidoId == pedidoId);
+        pedido.Estado.Should().Be("Entregado");
+    }
 }

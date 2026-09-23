@@ -131,3 +131,48 @@ public class PedidoActualizadoConsumer : IConsumer<PedidoActualizado>
             evento.PedidoId, evento.EstadoAnterior, evento.EstadoNuevo);
     }
 }
+
+/// <summary>
+/// Marca el pedido como entregado (TASK-305).
+///
+/// Es el evento terminal del ciclo: Delivery lo publica cuando el cliente escanea el QR de
+/// cierre. Sin este consumer la proyección se quedaría en <c>EnRuta</c> y la encuesta nunca
+/// se habilitaría, porque solo se acepta para pedidos entregados.
+/// </summary>
+public class PedidoEntregadoConsumer : IConsumer<PedidoEntregado>
+{
+    private const string EstadoEntregado = "Entregado";
+
+    private readonly FeedbackDbContext _db;
+    private readonly ILogger<PedidoEntregadoConsumer> _logger;
+
+    public PedidoEntregadoConsumer(FeedbackDbContext db, ILogger<PedidoEntregadoConsumer> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
+
+    public async Task Consume(ConsumeContext<PedidoEntregado> context)
+    {
+        var evento = context.Message;
+
+        var pedido = await _db.PedidosReplicados
+            .FirstOrDefaultAsync(p => p.PedidoId == evento.PedidoId, context.CancellationToken);
+
+        if (pedido is null)
+        {
+            _logger.LogWarning(
+                "PedidoEntregado recibido para un pedido no proyectado: PedidoId={PedidoId}",
+                evento.PedidoId);
+            return;
+        }
+
+        pedido.Estado = EstadoEntregado;
+        pedido.ActualizadoEn = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(context.CancellationToken);
+
+        _logger.LogInformation(
+            "Pedido {Codigo} marcado como entregado: la encuesta queda habilitada", evento.Codigo);
+    }
+}

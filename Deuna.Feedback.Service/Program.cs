@@ -45,6 +45,8 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<PedidoCreadoConsumer>();
     x.AddConsumer<PedidoAsignadoConsumer>();
     x.AddConsumer<PedidoActualizadoConsumer>();
+    // Evento terminal: es el que habilita la encuesta (TASK-305).
+    x.AddConsumer<PedidoEntregadoConsumer>();
     x.AddConsumer<RepartidorRegistradoConsumer>();
 
     if (useInMemory)
