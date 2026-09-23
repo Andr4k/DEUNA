@@ -70,6 +70,20 @@ public record RestauranteRegistrado(
 );
 
 /// <summary>
+/// Publicado por Identity cuando se registra un repartidor. Contrato v1.
+/// Consumido por Delivery (matching por cercanía y asignación) y por Feedback
+/// (la encuesta califica a un repartidor concreto).
+/// </summary>
+public record RepartidorRegistrado(
+    Guid RepartidorId,
+    string NombreCompleto,
+    string DocumentoIdentidad,
+    string CiudadOperacion,
+    string? FotoPerfilUrl,
+    DateTime OccurredAt
+);
+
+/// <summary>
 /// Publicado por Delivery cuando un repartidor acepta un pedido disponible. Contrato v1.
 /// </summary>
 public record PedidoAsignado(
