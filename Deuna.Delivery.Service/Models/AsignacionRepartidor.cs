@@ -31,11 +31,18 @@ public class AsignacionRepartidor
 
     public DateTime FechaAsignacion { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Momento en que el domiciliario escaneó el QR del local y se confirmó su presencia
+    /// física (TASK-304). Vive por asignación: cada intento tiene su propia llegada.
+    /// </summary>
+    public DateTime? FechaLlegadaLocal { get; set; }
+
     public DateTime? FechaRechazo { get; set; }
 
     [MaxLength(300)]
     public string? MotivoRechazo { get; set; }
 
     public const string EstadoAsignado = "Asignado";
+    public const string EstadoConfirmadoEnLocal = "ConfirmadoEnLocal";
     public const string EstadoRechazado = "Rechazado";
 }

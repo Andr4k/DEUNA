@@ -29,3 +29,16 @@ public class RechazarPedidoRequestValidator : AbstractValidator<RechazarPedidoRe
             .MaximumLength(300).WithMessage("El motivo no puede superar los 300 caracteres");
     }
 }
+
+public class ValidarQrLocalRequestValidator : AbstractValidator<ValidarQrLocalRequest>
+{
+    public ValidarQrLocalRequestValidator()
+    {
+        RuleFor(x => x.OrderId)
+            .NotEmpty().WithMessage("El pedido es obligatorio");
+
+        RuleFor(x => x.TokenQrLocal)
+            .NotEmpty().WithMessage("El token del QR es obligatorio")
+            .MaximumLength(64).WithMessage("El token del QR es demasiado largo");
+    }
+}

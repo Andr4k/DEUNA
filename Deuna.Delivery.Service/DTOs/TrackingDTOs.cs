@@ -31,3 +31,12 @@ public record UbicacionRepartidorResponse(
 public record RechazarPedidoRequest(
     [MaxLength(300)] string? Motivo
 );
+
+/// <summary>
+/// Validación del QR de recogida en el local (TASK-304). El domiciliario escanea el QR que
+/// muestra el restaurante y lo manda acá: es la prueba de que llegó físicamente.
+/// </summary>
+public record ValidarQrLocalRequest(
+    [Required] Guid OrderId,
+    [Required, MaxLength(64)] string TokenQrLocal
+);
