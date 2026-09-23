@@ -20,3 +20,12 @@ public class ActualizarUbicacionRequestValidator : AbstractValidator<ActualizarU
             .NotEmpty().WithMessage("El timestamp es obligatorio");
     }
 }
+
+public class RechazarPedidoRequestValidator : AbstractValidator<RechazarPedidoRequest>
+{
+    public RechazarPedidoRequestValidator()
+    {
+        RuleFor(x => x.Motivo)
+            .MaximumLength(300).WithMessage("El motivo no puede superar los 300 caracteres");
+    }
+}

@@ -23,3 +23,11 @@ public record UbicacionRepartidorResponse(
     double? DistanciaMetros,
     DateTime? ActualizadoEn
 );
+
+/// <summary>
+/// Rechazo del pedido asignado (TASK-303). El motivo es opcional: obligarlo llevaría a
+/// motivos inventados, y el dato que importa es que el pedido vuelva a búsqueda.
+/// </summary>
+public record RechazarPedidoRequest(
+    [MaxLength(300)] string? Motivo
+);
