@@ -1,5 +1,8 @@
 using Deuna.Delivery.Service.Consumers;
+using Deuna.Delivery.Service.Endpoints;
 using Deuna.Delivery.Service.Models;
+using Deuna.Delivery.Service.Services;
+using Deuna.Shared.Extensions;
 using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -39,13 +42,14 @@ builder.Services.AddDbContext<DeliveryDbContext>(options =>
     });
 });
 
-if (!useInMemory)
+// Redis: se registra si hay configuración explícita; en tests (BD InMemory) permite
+// apuntar a un Redis real en TestContainers.
+var redisConfiguration = builder.Configuration["Redis:Configuration"]
+    ?? (useInMemory ? null : "localhost:6379,password=redis_dev_2026");
+
+if (redisConfiguration is not null)
 {
-    builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-    {
-        var configuration = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
-        return ConnectionMultiplexer.Connect(configuration);
-    });
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfiguration));
 }
 
 builder.Services.AddMassTransit(x =>
@@ -78,6 +82,13 @@ builder.Services.AddMassTransit(x =>
 
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
+// Autenticación JWT compartida (policies: restaurant, rider, admin)
+builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
+
+// Tracking GPS
+builder.Services.AddScoped<ITrackingStore, RedisTrackingStore>();
+builder.Services.AddScoped<ITrackingService, TrackingService>();
+
 var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
 var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
 
@@ -104,12 +115,18 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging();
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseDeunaJwtMiddleware();
 
 app.MapHealthChecks("/health");
 
 app.MapGet("/api/delivery/health", () => Results.Ok(new { status = "healthy", service = "delivery", timestamp = DateTime.UtcNow }))
     .WithName("DeliveryHealthCheck")
     .AllowAnonymous();
+
+// Tracking GPS (TASK-302)
+app.MapTrackingEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {
