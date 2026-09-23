@@ -39,6 +39,12 @@ public class AsignacionRepartidor
 
     public DateTime? FechaRechazo { get; set; }
 
+    /// <summary>Momento en que el domiciliario inició la entrega (paso a EnRuta, TASK-305).</summary>
+    public DateTime? FechaInicioEntrega { get; set; }
+
+    /// <summary>Momento en que el cliente escaneó el QR de cierre y la entrega terminó.</summary>
+    public DateTime? FechaEntrega { get; set; }
+
     [MaxLength(300)]
     public string? MotivoRechazo { get; set; }
 

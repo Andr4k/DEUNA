@@ -49,7 +49,7 @@ public record PedidoAsignadoDto(
 /// Motivo del rechazo. Va tipado para que la capa HTTP elija el código de estado sin
 /// adivinar por el texto del mensaje.
 /// </summary>
-public enum MotivoRechazoQr
+public enum MotivoRechazo
 {
     Ninguno,
     PedidoNoEncontrado,
@@ -65,9 +65,28 @@ public enum MotivoRechazoQr
 public record ResultadoValidacionQr(
     bool Valido,
     string Mensaje,
-    MotivoRechazoQr Motivo = MotivoRechazoQr.Ninguno,
+    MotivoRechazo Motivo = MotivoRechazo.Ninguno,
     string? Estado = null,
     DateTime? FechaLlegadaLocal = null);
+
+/// <summary>Resultado de iniciar la entrega (TASK-305).</summary>
+public record ResultadoInicioEntrega(
+    bool Iniciada,
+    string Mensaje,
+    MotivoRechazo Motivo = MotivoRechazo.Ninguno,
+    string? Estado = null);
+
+/// <summary>
+/// Resultado del cierre por QR. Devuelve el repartidor porque quien cierra es el cliente,
+/// que no tiene sesión: sin ese dato no se puede limpiar su telemetría.
+/// </summary>
+public record ResultadoCierreEntrega(
+    bool Cerrado,
+    string Mensaje,
+    MotivoRechazo Motivo = MotivoRechazo.Ninguno,
+    string? Estado = null,
+    DateTime? FechaEntrega = null,
+    Guid? RepartidorId = null);
 
 /// <summary>
 /// Asignación automática del pedido al domiciliario disponible más cercano (TASK-303).
@@ -98,6 +117,27 @@ public interface IAsignacionService
         Guid pedidoId,
         Guid repartidorId,
         string tokenQrLocal,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Inicia la entrega: el pedido pasa a <c>EnRuta</c> y se publica el cambio de estado
+    /// (TASK-305). Requiere haber confirmado antes la llegada al local.
+    /// </summary>
+    Task<ResultadoInicioEntrega> IniciarEntregaAsync(
+        Guid pedidoId,
+        Guid repartidorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cierra la entrega validando el QR que muestra el domiciliario (TASK-305).
+    ///
+    /// Es público a propósito: quien escanea es el cliente, que no tiene sesión. Registra la
+    /// fecha de entrega, limpia la telemetría del domiciliario (FR-003.10) y publica
+    /// <c>PedidoEntregado</c>.
+    /// </summary>
+    Task<ResultadoCierreEntrega> CerrarEntregaAsync(
+        Guid pedidoId,
+        string tokenQrEntrega,
         CancellationToken cancellationToken = default);
 }
 
@@ -318,7 +358,7 @@ public class AsignacionService : IAsignacionService
             return new ResultadoValidacionQr(
                 false,
                 $"El pedido {pedidoId} no está proyectado en Delivery",
-                MotivoRechazoQr.PedidoNoEncontrado);
+                MotivoRechazo.PedidoNoEncontrado);
         }
 
         // Solo el domiciliario asignado: el QR prueba que llegó quien tiene el pedido.
@@ -327,7 +367,7 @@ public class AsignacionService : IAsignacionService
             return new ResultadoValidacionQr(
                 false,
                 $"El pedido {pedido.Codigo} no está asignado a este domiciliario",
-                MotivoRechazoQr.NoAsignado);
+                MotivoRechazo.NoAsignado);
         }
 
         // La validación es de una sola vez: repetirla no puede volver a mover el estado ni
@@ -339,7 +379,7 @@ public class AsignacionService : IAsignacionService
                 pedido.Estado == PedidoDisponible.EstadoConfirmadoEnLocal
                     ? $"La llegada del pedido {pedido.Codigo} ya estaba confirmada"
                     : $"El pedido {pedido.Codigo} no está en estado de recogida (estado {pedido.Estado})",
-                MotivoRechazoQr.EstadoInvalido);
+                MotivoRechazo.EstadoInvalido);
         }
 
         // Comparación ordinal: el token es de un solo uso, está atado a un pedido concreto y
@@ -350,7 +390,7 @@ public class AsignacionService : IAsignacionService
             return new ResultadoValidacionQr(
                 false,
                 $"El token del QR no corresponde al pedido {pedido.Codigo}",
-                MotivoRechazoQr.TokenInvalido);
+                MotivoRechazo.TokenInvalido);
         }
 
         var ahora = DateTime.UtcNow;
@@ -382,6 +422,182 @@ public class AsignacionService : IAsignacionService
             Estado: pedido.Estado,
             FechaLlegadaLocal: ahora);
     }
+
+    public async Task<ResultadoInicioEntrega> IniciarEntregaAsync(
+        Guid pedidoId,
+        Guid repartidorId,
+        CancellationToken cancellationToken = default)
+    {
+        var pedido = await _db.PedidosDisponibles
+            .FirstOrDefaultAsync(p => p.PedidoId == pedidoId, cancellationToken);
+
+        if (pedido is null)
+        {
+            return new ResultadoInicioEntrega(
+                false,
+                $"El pedido {pedidoId} no está proyectado en Delivery",
+                MotivoRechazo.PedidoNoEncontrado);
+        }
+
+        if (pedido.RepartidorId != repartidorId)
+        {
+            return new ResultadoInicioEntrega(
+                false,
+                $"El pedido {pedido.Codigo} no está asignado a este domiciliario",
+                MotivoRechazo.NoAsignado);
+        }
+
+        // La entrega arranca después de confirmar la llegada al local: si no, el domiciliario
+        // podría ponerse en ruta sin haber recogido el pedido.
+        if (pedido.Estado != PedidoDisponible.EstadoConfirmadoEnLocal)
+        {
+            return new ResultadoInicioEntrega(
+                false,
+                pedido.Estado == PedidoDisponible.EstadoEnRuta
+                    ? $"El pedido {pedido.Codigo} ya está en ruta"
+                    : $"El pedido {pedido.Codigo} todavía no está confirmado en el local (estado {pedido.Estado})",
+                MotivoRechazo.EstadoInvalido);
+        }
+
+        var ahora = DateTime.UtcNow;
+
+        var asignacion = await AsignacionActivaAsync(pedidoId, repartidorId, cancellationToken);
+        if (asignacion is not null)
+        {
+            asignacion.FechaInicioEntrega = ahora;
+        }
+
+        pedido.Estado = PedidoDisponible.EstadoEnRuta;
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        await _publishEndpoint.Publish(
+            new PedidoActualizado(
+                PedidoId: pedido.PedidoId,
+                Codigo: pedido.Codigo,
+                EstadoAnterior: PedidoDisponible.EstadoConfirmadoEnLocal,
+                EstadoNuevo: PedidoDisponible.EstadoEnRuta,
+                OccurredAt: ahora),
+            cancellationToken);
+
+        _logger.LogInformation(
+            "Pedido {Codigo}: entrega iniciada por {RepartidorId}", pedido.Codigo, repartidorId);
+
+        return new ResultadoInicioEntrega(
+            true,
+            $"Entrega del pedido {pedido.Codigo} iniciada.",
+            Estado: pedido.Estado);
+    }
+
+    public async Task<ResultadoCierreEntrega> CerrarEntregaAsync(
+        Guid pedidoId,
+        string tokenQrEntrega,
+        CancellationToken cancellationToken = default)
+    {
+        var pedido = await _db.PedidosDisponibles
+            .FirstOrDefaultAsync(p => p.PedidoId == pedidoId, cancellationToken);
+
+        if (pedido is null)
+        {
+            return new ResultadoCierreEntrega(
+                false,
+                $"El pedido {pedidoId} no está proyectado en Delivery",
+                MotivoRechazo.PedidoNoEncontrado);
+        }
+
+        // Cierra una entrega en curso: el pedido tiene que haber salido del local.
+        if (pedido.Estado != PedidoDisponible.EstadoEnRuta)
+        {
+            return new ResultadoCierreEntrega(
+                false,
+                pedido.Estado == PedidoDisponible.EstadoEntregado
+                    ? $"El pedido {pedido.Codigo} ya estaba entregado"
+                    : $"El pedido {pedido.Codigo} no está en ruta (estado {pedido.Estado})",
+                MotivoRechazo.EstadoInvalido);
+        }
+
+        if (!string.Equals(pedido.TokenQrEntrega, tokenQrEntrega.Trim(), StringComparison.Ordinal))
+        {
+            return new ResultadoCierreEntrega(
+                false,
+                $"El token del QR no corresponde al pedido {pedido.Codigo}",
+                MotivoRechazo.TokenInvalido);
+        }
+
+        var ahora = DateTime.UtcNow;
+        var repartidorId = pedido.RepartidorId;
+
+        if (repartidorId is not null)
+        {
+            var asignacion = await AsignacionActivaAsync(pedidoId, repartidorId.Value, cancellationToken);
+            if (asignacion is not null)
+            {
+                asignacion.FechaEntrega = ahora;
+            }
+        }
+
+        pedido.Estado = PedidoDisponible.EstadoEntregado;
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        // FR-003.10: la última posición del domiciliario deja de ser válida cuando ya no está
+        // en ruta. Un fallo al limpiar no puede impedir cerrar la entrega —el pedido ya está
+        // entregado y el TTL de Redis termina borrando la telemetría igual—, así que se
+        // registra y se sigue.
+        if (repartidorId is not null)
+        {
+            try
+            {
+                await _trackingStore.EliminarAsync(repartidorId.Value, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "No se pudo limpiar la telemetría del repartidor {RepartidorId} tras cerrar la entrega {Codigo}",
+                    repartidorId, pedido.Codigo);
+            }
+        }
+
+        // Quien cierra es el cliente, sin sesión: el repartidor sale del pedido, no del token.
+        if (repartidorId is not null)
+        {
+            await _publishEndpoint.Publish(
+                new PedidoEntregado(
+                    PedidoId: pedido.PedidoId,
+                    Codigo: pedido.Codigo,
+                    RepartidorId: repartidorId.Value,
+                    FechaEntrega: ahora,
+                    OccurredAt: ahora),
+                cancellationToken);
+        }
+
+        _logger.LogInformation(
+            "Pedido {Codigo}: entrega cerrada (repartidor {RepartidorId})", pedido.Codigo, repartidorId);
+
+        return new ResultadoCierreEntrega(
+            true,
+            $"Entrega del pedido {pedido.Codigo} cerrada. ¡Gracias!",
+            Estado: pedido.Estado,
+            FechaEntrega: ahora,
+            RepartidorId: repartidorId);
+    }
+
+    /// <summary>
+    /// Asignación activa del pedido para ese repartidor: la última que no fue rechazada.
+    /// El estado del pedido vive en <see cref="PedidoDisponible"/>; esta fila es su historial,
+    /// así que no se le duplica la máquina de estados.
+    /// </summary>
+    private Task<AsignacionRepartidor?> AsignacionActivaAsync(
+        Guid pedidoId,
+        Guid repartidorId,
+        CancellationToken cancellationToken) =>
+        _db.AsignacionesRepartidor
+            .Where(a => a.PedidoId == pedidoId
+                        && a.RepartidorId == repartidorId
+                        && a.Estado != AsignacionRepartidor.EstadoRechazado)
+            .OrderByDescending(a => a.FechaAsignacion)
+            .FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>Repartidores con una entrega activa: no pueden recibir otra (FR-003.1).</summary>
     private async Task<HashSet<Guid>> RepartidoresOcupadosAsync(CancellationToken cancellationToken)

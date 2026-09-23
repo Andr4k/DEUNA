@@ -101,8 +101,8 @@ public static class AssignmentEndpoints
             {
                 return resultado.Motivo switch
                 {
-                    MotivoRechazoQr.PedidoNoEncontrado => Results.NotFound(new { message = resultado.Mensaje }),
-                    MotivoRechazoQr.NoAsignado => Results.StatusCode(StatusCodes.Status403Forbidden),
+                    MotivoRechazo.PedidoNoEncontrado => Results.NotFound(new { message = resultado.Mensaje }),
+                    MotivoRechazo.NoAsignado => Results.StatusCode(StatusCodes.Status403Forbidden),
                     _ => Results.BadRequest(new { message = resultado.Mensaje })
                 };
             }
@@ -119,6 +119,84 @@ public static class AssignmentEndpoints
         .RequireAuthorization("rider")
         .WithName("ValidateLocalQr")
         .WithSummary("Valida el QR que muestra el restaurante y confirma la llegada al local");
+
+        // POST /api/v1/delivery/start-delivery/{orderId} — el domiciliario inicia la entrega
+        grupo.MapPost("/start-delivery/{orderId:guid}", async (
+            Guid orderId,
+            IAsignacionService asignacion,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var repartidorId = httpContext.GetUserId();
+            if (repartidorId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var resultado = await asignacion.IniciarEntregaAsync(orderId, repartidorId.Value, cancellationToken);
+
+            if (!resultado.Iniciada)
+            {
+                return resultado.Motivo switch
+                {
+                    MotivoRechazo.PedidoNoEncontrado => Results.NotFound(new { message = resultado.Mensaje }),
+                    MotivoRechazo.NoAsignado => Results.StatusCode(StatusCodes.Status403Forbidden),
+                    _ => Results.BadRequest(new { message = resultado.Mensaje })
+                };
+            }
+
+            return Results.Ok(new
+            {
+                message = resultado.Mensaje,
+                estado = resultado.Estado,
+                // Mientras está en ruta, la app del cliente puede seguir la telemetría.
+                puedeSeguirTracking = true
+            });
+        })
+        .RequireAuthorization("rider")
+        .WithName("StartDelivery")
+        .WithSummary("Inicia la entrega del pedido ya confirmado en el local (estado EnRuta)");
+
+        // POST /api/v1/delivery/validate-qr-delivery — el CLIENTE escanea el QR de cierre.
+        //
+        // Es público a propósito: quien escanea es el cliente, que no tiene sesión. El
+        // token del QR es lo único que autoriza el cierre, y es de un solo uso.
+        grupo.MapPost("/validate-qr-delivery", async (
+            ValidarQrEntregaRequest request,
+            IAsignacionService asignacion,
+            IValidator<ValidarQrEntregaRequest> validator,
+            CancellationToken cancellationToken) =>
+        {
+            var validacion = await validator.ValidateAsync(request, cancellationToken);
+            if (!validacion.IsValid)
+            {
+                return Results.ValidationProblem(validacion.ToDictionary());
+            }
+
+            var resultado = await asignacion.CerrarEntregaAsync(
+                request.OrderId, request.TokenQrEntrega, cancellationToken);
+
+            if (!resultado.Cerrado)
+            {
+                return resultado.Motivo switch
+                {
+                    MotivoRechazo.PedidoNoEncontrado => Results.NotFound(new { message = resultado.Mensaje }),
+                    _ => Results.BadRequest(new { message = resultado.Mensaje })
+                };
+            }
+
+            return Results.Ok(new
+            {
+                message = resultado.Mensaje,
+                estado = resultado.Estado,
+                fechaEntrega = resultado.FechaEntrega,
+                // El paso siguiente del flujo es la encuesta (TASK-401).
+                puedeCalificar = true
+            });
+        })
+        .AllowAnonymous()
+        .WithName("ValidateDeliveryQr")
+        .WithSummary("Cierra la entrega validando el QR que muestra el domiciliario (público)");
 
         return app;
     }

@@ -39,13 +39,33 @@ public record PedidoCreado(
 );
 
 /// <summary>
-/// Publicado por Orders cuando cambia el estado de un pedido. Contrato v1.
+/// Publicado cuando cambia el estado de un pedido. Contrato v1.
+///
+/// Lo publican dos servicios: Orders (transiciones del pedido) y Delivery (el paso a
+/// <c>EnRuta</c> del ciclo de entrega, TASK-305). Consumido por Feedback para mantener su
+/// proyección al día.
 /// </summary>
 public record PedidoActualizado(
     Guid PedidoId,
     string Codigo,
     string EstadoAnterior,
     string EstadoNuevo,
+    DateTime OccurredAt
+);
+
+/// <summary>
+/// Publicado por Delivery cuando el cliente escanea el QR de cierre y la entrega termina
+/// (TASK-305). Contrato v1.
+///
+/// Es el evento terminal del pedido. Consumido por Orders (que cierra el pedido en su
+/// propio estado y registra la fecha de entrega) y por Feedback (que solo acepta la
+/// encuesta de un pedido <c>Entregado</c>).
+/// </summary>
+public record PedidoEntregado(
+    Guid PedidoId,
+    string Codigo,
+    Guid RepartidorId,
+    DateTime FechaEntrega,
     DateTime OccurredAt
 );
 

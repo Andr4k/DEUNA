@@ -40,3 +40,12 @@ public record ValidarQrLocalRequest(
     [Required] Guid OrderId,
     [Required, MaxLength(64)] string TokenQrLocal
 );
+
+/// <summary>
+/// Cierre de la entrega (TASK-305). Lo llama el cliente al escanear el QR que muestra el
+/// domiciliario: no lleva usuario porque el cliente no tiene sesión en el sistema.
+/// </summary>
+public record ValidarQrEntregaRequest(
+    [Required] Guid OrderId,
+    [Required, MaxLength(64)] string TokenQrEntrega
+);

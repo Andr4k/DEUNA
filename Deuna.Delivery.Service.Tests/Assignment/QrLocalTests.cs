@@ -121,7 +121,7 @@ public class QrLocalTests : IDisposable
             pedido.PedidoId, RepartidorId, "00000000000000000000000000000000");
 
         resultado.Valido.Should().BeFalse();
-        resultado.Motivo.Should().Be(MotivoRechazoQr.TokenInvalido);
+        resultado.Motivo.Should().Be(MotivoRechazo.TokenInvalido);
 
         var guardado = await _db.PedidosDisponibles.SingleAsync(p => p.PedidoId == pedido.PedidoId);
         guardado.Estado.Should().Be(PedidoDisponible.EstadoAsignado);
@@ -137,7 +137,7 @@ public class QrLocalTests : IDisposable
         var resultado = await CrearServicio().ValidarQrLocalAsync(pedido.PedidoId, RepartidorId, TokenEntrega);
 
         resultado.Valido.Should().BeFalse();
-        resultado.Motivo.Should().Be(MotivoRechazoQr.TokenInvalido);
+        resultado.Motivo.Should().Be(MotivoRechazo.TokenInvalido);
     }
 
     [Fact]
@@ -148,7 +148,7 @@ public class QrLocalTests : IDisposable
         var resultado = await CrearServicio().ValidarQrLocalAsync(pedido.PedidoId, OtroRepartidorId, TokenLocal);
 
         resultado.Valido.Should().BeFalse();
-        resultado.Motivo.Should().Be(MotivoRechazoQr.NoAsignado);
+        resultado.Motivo.Should().Be(MotivoRechazo.NoAsignado);
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class QrLocalTests : IDisposable
         var resultado = await CrearServicio().ValidarQrLocalAsync(pedido.PedidoId, RepartidorId, TokenLocal);
 
         resultado.Valido.Should().BeFalse();
-        resultado.Motivo.Should().Be(MotivoRechazoQr.NoAsignado);
+        resultado.Motivo.Should().Be(MotivoRechazo.NoAsignado);
     }
 
     [Fact]
@@ -168,7 +168,7 @@ public class QrLocalTests : IDisposable
         var resultado = await CrearServicio().ValidarQrLocalAsync(Guid.NewGuid(), RepartidorId, TokenLocal);
 
         resultado.Valido.Should().BeFalse();
-        resultado.Motivo.Should().Be(MotivoRechazoQr.PedidoNoEncontrado);
+        resultado.Motivo.Should().Be(MotivoRechazo.PedidoNoEncontrado);
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public class QrLocalTests : IDisposable
         var segunda = await servicio.ValidarQrLocalAsync(pedido.PedidoId, RepartidorId, TokenLocal);
 
         segunda.Valido.Should().BeFalse("la llegada ya estaba confirmada");
-        segunda.Motivo.Should().Be(MotivoRechazoQr.EstadoInvalido);
+        segunda.Motivo.Should().Be(MotivoRechazo.EstadoInvalido);
 
         var asignacion = await _db.AsignacionesRepartidor.SingleAsync();
         asignacion.FechaLlegadaLocal.Should().Be(llegada, "la hora de llegada no se reescribe");
