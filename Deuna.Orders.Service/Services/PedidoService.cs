@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using Deuna.Orders.Service.Models;
 using Deuna.Orders.Service.DTOs;
-using Deuna.Orders.Service.Events;
+using Deuna.Shared.Events;
 using Deuna.Shared.Extensions;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -54,7 +54,10 @@ public class PedidoService : IPedidoService
         }
 
         // Verificar que el restaurante existe y está activo
+        // Include obligatorio: EstaEnHorarioAtencion lee restaurante.HorariosAtencion;
+        // sin la navegación cargada la colección llega vacía y todo pedido se rechaza con 400.
         var restaurante = await _db.RestaurantesReplicados
+            .Include(r => r.HorariosAtencion)
             .FirstOrDefaultAsync(r => r.Id == request.RestauranteId && r.Activo && r.AceptaPedidos);
 
         if (restaurante == null)
