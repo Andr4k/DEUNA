@@ -79,7 +79,8 @@ public class NotificacionConsumersTests : IDisposable
             RestauranteId: RestauranteId,
             Total: 55000m,
             Estado: "Pendiente",
-            QrCodigo: "qr-abc",
+            TokenQrLocal: "qr-local-abc",
+            TokenQrEntrega: "qr-entrega-xyz",
             OccurredAt: DateTime.UtcNow)));
 
         _proveedor.Envios.Should().HaveCount(1);
