@@ -1,0 +1,289 @@
+### Variables
+@baseUrl = http://localhost:5002
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (obtener desde login en Identity Service)
+
+### 1. Crear Pedido (Caso Exitoso)
+POST {{baseUrl}}/api/v1/orders
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "restauranteId": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+  "items": [
+    {
+      "nombreProducto": "Hamburguesa Clásica",
+      "descripcion": "Carne 180g, queso, lechuga, tomate, cebolla, salsa especial",
+      "cantidad": 2,
+      "precioUnitario": 25000
+    },
+    {
+      "nombreProducto": "Papas Fritas Grandes",
+      "descripcion": "Porción grande con salsa ketchup y mayonesa",
+      "cantidad": 1,
+      "precioUnitario": 12000
+    },
+    {
+      "nombreProducto": "Gaseosa 500ml",
+      "descripcion": "Coca-Cola, Sprite o Fanta",
+      "cantidad": 2,
+      "precioUnitario": 5000
+    }
+  ],
+  "direccionEntrega": {
+    "calle": "Calle 45",
+    "numero": "#23-10",
+    "interior": "Apto 301",
+    "referencia": "Edificio Torres del Parque, torre 2",
+    "ciudad": "Bogotá",
+    "departamento": "Cundinamarca",
+    "codigoPostal": "110111",
+    "latitud": 4.6097100,
+    "longitud": -74.0817500
+  },
+  "contactos": [
+    {
+      "tipo": "Cliente",
+      "nombre": "Juan Pérez",
+      "telefono": "+573001234567",
+      "email": "juan.perez@email.com"
+    },
+    {
+      "tipo": "Restaurante",
+      "nombre": "Demo Restaurant",
+      "telefono": "+5712345678",
+      "email": "pedidos@demorestaurant.com"
+    }
+  ],
+  "notasCliente": "Sin cebolla en las hamburguesas, por favor"
+}
+
+### Expected Response (201 Created)
+# {
+#   "pedidoId": "b2c3d4e5-6f7g-8h9i-0j1k-l2m3n4o5p6q7",
+#   "codigo": "PED-20260922-000001",
+#   "qrCodigo": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+#   "estado": "Pendiente",
+#   "subtotal": 72000,
+#   "costoEnvio": 5500,
+#   "total": 77500,
+#   "fechaCreacion": "2026-09-22T10:30:00.000Z"
+# }
+
+###
+
+### 2. Crear Pedido (Fuera de Radio de Cobertura - Error 400)
+POST {{baseUrl}}/api/v1/orders
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "restauranteId": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+  "items": [
+    {
+      "nombreProducto": "Hamburguesa Clásica",
+      "descripcion": "Carne 180g, queso, lechuga, tomate, cebolla, salsa especial",
+      "cantidad": 1,
+      "precioUnitario": 25000
+    }
+  ],
+  "direccionEntrega": {
+    "calle": "Carrera 100",
+    "numero": "#50-20",
+    "ciudad": "Medellín",
+    "latitud": 6.2442,
+    "longitud": -75.5812
+  },
+  "contactos": [
+    {
+      "tipo": "Cliente",
+      "nombre": "María González",
+      "telefono": "+573009876543",
+      "email": "maria.gonzalez@email.com"
+    }
+  ]
+}
+
+### Expected Response (400 Bad Request)
+# {
+#   "success": false,
+#   "message": "Dirección fuera de cobertura. Distancia: 415.23 km, Radio máximo: 5 km"
+# }
+
+###
+
+### 3. Crear Pedido (Datos Inválidos - Error 400)
+POST {{baseUrl}}/api/v1/orders
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "restauranteId": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+  "items": [],
+  "direccionEntrega": {
+    "calle": "",
+    "ciudad": "",
+    "latitud": 91,
+    "longitud": -200
+  },
+  "contactos": []
+}
+
+### Expected Response (400 Bad Request)
+# {
+#   "success": false,
+#   "message": "Datos inválidos",
+#   "errors": [
+#     "El pedido debe tener al menos un item",
+#     "La calle es obligatoria",
+#     "La ciudad es obligatoria",
+#     "La latitud debe estar entre -90 y 90",
+#     "La longitud debe estar entre -180 y 180",
+#     "El pedido debe tener al menos un contacto",
+#     "Debe haber al menos un contacto de tipo Cliente"
+#   ]
+# }
+
+###
+
+### 4. Obtener Pedido por ID
+GET {{baseUrl}}/api/v1/orders/b2c3d4e5-6f7g-8h9i-0j1k-l2m3n4o5p6q7
+Authorization: Bearer {{token}}
+
+### Expected Response (200 OK)
+# {
+#   "id": "b2c3d4e5-6f7g-8h9i-0j1k-l2m3n4o5p6q7",
+#   "clienteId": "c3d4e5f6-7g8h-9i0j-1k2l-m3n4o5p6q7r8",
+#   "restauranteId": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+#   "codigo": "PED-20260922-000001",
+#   "estado": "Pendiente",
+#   "subtotal": 72000,
+#   "costoEnvio": 5500,
+#   "total": 77500,
+#   "direccionEntrega": {
+#     "id": "d4e5f6g7-8h9i-0j1k-2l3m-n4o5p6q7r8s9",
+#     "calle": "Calle 45",
+#     "numero": "#23-10",
+#     "interior": "Apto 301",
+#     "referencia": "Edificio Torres del Parque, torre 2",
+#     "ciudad": "Bogotá",
+#     "departamento": "Cundinamarca",
+#     "codigoPostal": "110111",
+#     "latitud": 4.60971,
+#     "longitud": -74.08175
+#   },
+#   "qrCodigo": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+#   "notasCliente": "Sin cebolla en las hamburguesas, por favor",
+#   "notasRestaurante": null,
+#   "fechaCreacion": "2026-09-22T10:30:00.000Z",
+#   "fechaConfirmacion": null,
+#   "fechaPreparacion": null,
+#   "fechaListo": null,
+#   "fechaEntrega": null,
+#   "fechaCancelacion": null,
+#   "items": [
+#     {
+#       "id": "e5f6g7h8-9i0j-1k2l-3m4n-o5p6q7r8s9t0",
+#       "nombreProducto": "Hamburguesa Clásica",
+#       "descripcion": "Carne 180g, queso, lechuga, tomate, cebolla, salsa especial",
+#       "cantidad": 2,
+#       "precioUnitario": 25000,
+#       "subtotal": 50000
+#     },
+#     {
+#       "id": "f6g7h8i9-0j1k-2l3m-4n5o-p6q7r8s9t0u1",
+#       "nombreProducto": "Papas Fritas Grandes",
+#       "descripcion": "Porción grande con salsa ketchup y mayonesa",
+#       "cantidad": 1,
+#       "precioUnitario": 12000,
+#       "subtotal": 12000
+#     },
+#     {
+#       "id": "g7h8i9j0-1k2l-3m4n-5o6p-q7r8s9t0u1v2",
+#       "nombreProducto": "Gaseosa 500ml",
+#       "descripcion": "Coca-Cola, Sprite o Fanta",
+#       "cantidad": 2,
+#       "precioUnitario": 5000,
+#       "subtotal": 10000
+#     }
+#   ],
+#   "contactos": [
+#     {
+#       "id": "h8i9j0k1-2l3m-4n5o-6p7q-r8s9t0u1v2w3",
+#       "tipo": "Cliente",
+#       "nombre": "Juan Pérez",
+#       "telefono": "+573001234567",
+#       "email": "juan.perez@email.com"
+#     },
+#     {
+#       "id": "i9j0k1l2-3m4n-5o6p-7q8r-s9t0u1v2w3x4",
+#       "tipo": "Restaurante",
+#       "nombre": "Demo Restaurant",
+#       "telefono": "+5712345678",
+#       "email": "pedidos@demorestaurant.com"
+#     }
+#   ],
+#   "tarifa": {
+#     "id": "j0k1l2m3-4n5o-6p7q-8r9s-t0u1v2w3x4y5",
+#     "tipoTarifa": "Distancia",
+#     "costoBase": 3000,
+#     "costoPorKm": 1500,
+#     "distanciaKm": 1.67,
+#     "costoAdicional": null,
+#     "detalleCalculo": "Distancia: 1.67 km. Costo base: $3.000,00. Costo por km: $1.500,00 × 1.67 km = $2.505,00",
+#     "totalCalculado": 5500
+#   }
+# }
+
+###
+
+### 5. Obtener Pedidos de un Cliente
+GET {{baseUrl}}/api/v1/orders/cliente/c3d4e5f6-7g8h-9i0j-1k2l-m3n4o5p6q7r8
+Authorization: Bearer {{token}}
+
+### Expected Response (200 OK)
+# [
+#   {
+#     "id": "b2c3d4e5-6f7g-8h9i-0j1k-l2m3n4o5p6q7",
+#     "clienteId": "c3d4e5f6-7g8h-9i0j-1k2l-m3n4o5p6q7r8",
+#     "restauranteId": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+#     "codigo": "PED-20260922-000001",
+#     "estado": "Pendiente",
+#     "subtotal": 72000,
+#     "costoEnvio": 5500,
+#     "total": 77500,
+#     ...
+#   }
+# ]
+
+###
+
+### 6. Obtener Pedidos de un Restaurante
+GET {{baseUrl}}/api/v1/orders/restaurante/a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6
+Authorization: Bearer {{token}}
+
+### Expected Response (200 OK)
+# [
+#   {
+#     "id": "b2c3d4e5-6f7g-8h9i-0j1k-l2m3n4o5p6q7",
+#     "clienteId": "c3d4e5f6-7g8h-9i0j-1k2l-m3n4o5p6q7r8",
+#     "restauranteId": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+#     "codigo": "PED-20260922-000001",
+#     "estado": "Pendiente",
+#     "subtotal": 72000,
+#     "costoEnvio": 5500,
+#     "total": 77500,
+#     ...
+#   }
+# ]
+
+###
+
+### 7. Health Check
+GET {{baseUrl}}/health
+
+### Expected Response (200 OK)
+# {
+#   "status": "healthy",
+#   "service": "orders",
+#   "timestamp": "2026-09-22T10:30:00.000Z"
+# }
