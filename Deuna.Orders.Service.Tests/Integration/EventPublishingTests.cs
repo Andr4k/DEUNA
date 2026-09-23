@@ -25,36 +25,14 @@ public class EventPublishingTests : IClassFixture<TestWebApplicationFactory>
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
-        await db.Database.EnsureDeletedAsync();
-        await db.Database.EnsureCreatedAsync();
+        await TestData.ResetAsync(db);
     }
 
     private async Task SeedRestauranteAsync()
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
-
-        var restaurante = new RestauranteReplicado
-        {
-            Id = Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
-            NombreComercial = "Demo Restaurant",
-            RazonSocial = "Demo Restaurant S.A.S.",
-            Nit = "900123456-7",
-            DireccionSede = "Calle 45 #23-10",
-            Ciudad = "Bogotá",
-            Latitud = 4.6097100m,
-            Longitud = -74.0817500m,
-            Ubicacion = new NetTopologySuite.Geometries.Point(-74.0817500, 4.6097100) { SRID = 4326 },
-            RadioCoberturaKm = 10.0m,
-            AceptaPedidos = true,
-            Activo = true,
-            HoraApertura = new TimeSpan(8, 0, 0),
-            HoraCierre = new TimeSpan(22, 0, 0),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        db.RestaurantesReplicados.Add(restaurante);
-        await db.SaveChangesAsync();
+        await TestData.SeedRestauranteAsync(db);
     }
 
     [Fact]
@@ -65,11 +43,9 @@ public class EventPublishingTests : IClassFixture<TestWebApplicationFactory>
         await SeedRestauranteAsync();
 
         using var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization = 
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "test-restaurant-token");
 
         var request = new CrearPedidoRequest(
-            RestauranteId: Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
+            RestauranteId: TestData.RestauranteId,
             Items: new List<CrearItemPedidoRequest>
             {
                 new("Hamburguesa", "Desc", 1, 25000m)
@@ -95,7 +71,7 @@ public class EventPublishingTests : IClassFixture<TestWebApplicationFactory>
         // (El evento se publica vía MassTransit, pero en InMemory no podemos interceptar fácilmente)
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
-        var pedido = await db.Pedidos.FirstOrDefaultAsync(p => p.RestauranteId == Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"));
+        var pedido = await db.Pedidos.FirstOrDefaultAsync(p => p.RestauranteId == TestData.RestauranteId);
         
         pedido.Should().NotBeNull();
         pedido!.Codigo.Should().StartWith("PED-");
@@ -111,12 +87,10 @@ public class EventPublishingTests : IClassFixture<TestWebApplicationFactory>
         await SeedRestauranteAsync();
 
         using var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization = 
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "test-restaurant-token");
 
         // Request inválido: sin items
         var request = new CrearPedidoRequest(
-            RestauranteId: Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
+            RestauranteId: TestData.RestauranteId,
             Items: new List<CrearItemPedidoRequest>(), // Inválido
             DireccionEntrega: new CrearDireccionEntregaRequest(
                 Calle: "Calle 45", Numero: "#23-10", Interior: null, Referencia: null,
@@ -150,11 +124,9 @@ public class EventPublishingTests : IClassFixture<TestWebApplicationFactory>
         // NO seed restaurante
 
         using var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization = 
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "test-restaurant-token");
 
         var request = new CrearPedidoRequest(
-            RestauranteId: Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"), // No existe
+            RestauranteId: TestData.RestauranteId, // No existe
             Items: new List<CrearItemPedidoRequest>
             {
                 new("Hamburguesa", "Desc", 1, 25000m)
@@ -183,5 +155,13 @@ public class EventPublishingTests : IClassFixture<TestWebApplicationFactory>
         pedidos.Should().BeEmpty();
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient();
+    private HttpClient CreateClient()
+    {
+        // Token JWT real firmado con la misma clave que valida el servicio.
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", TestJwt.CreateRestaurantToken(TestData.RestauranteId));
+        return client;
+    }
 }
