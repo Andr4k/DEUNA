@@ -1,3 +1,4 @@
+using Deuna.Delivery.Service.Consumers;
 using Deuna.Delivery.Service.Models;
 using FluentValidation;
 using MassTransit;
@@ -18,21 +19,43 @@ Log.Information("Starting Deuna Delivery Service");
 
 builder.Services.AddOpenApi();
 
+var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
+
 builder.Services.AddDbContext<DeliveryDbContext>(options =>
 {
+    if (useInMemory)
+    {
+        options.UseInMemoryDatabase("deuna_delivery");
+        return;
+    }
+
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
         ?? "Host=localhost;Port=5434;Database=deuna_delivery;Username=deuna_user;Password=deuna_dev_2026";
     options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsAssembly("Deuna.Delivery.Service"));
 });
 
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+if (!useInMemory)
 {
-    var configuration = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
-    return ConnectionMultiplexer.Connect(configuration);
-});
+    builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    {
+        var configuration = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
+        return ConnectionMultiplexer.Connect(configuration);
+    });
+}
 
 builder.Services.AddMassTransit(x =>
 {
+    x.AddConsumer<PedidoCreadoConsumer>();
+
+    if (useInMemory)
+    {
+        x.UsingInMemory((context, cfg) =>
+        {
+            cfg.ConfigureEndpoints(context);
+        });
+        return;
+    }
+
     x.UsingRabbitMq((context, cfg) =>
     {
         var host = builder.Configuration["RabbitMQ:Host"] ?? "localhost";
@@ -52,14 +75,20 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 var rabbitConn = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
 var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379,password=redis_dev_2026";
+
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<DeliveryDbContext>()
-    .AddRedis(redisConn)
-    .AddRabbitMQ(sp => 
-    {
-        var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = new Uri(rabbitConn) };
-        return factory.CreateConnectionAsync().GetAwaiter().GetResult();
-    });
+    .AddDbContextCheck<DeliveryDbContext>();
+
+if (!useInMemory)
+{
+    builder.Services.AddHealthChecks()
+        .AddRedis(redisConn)
+        .AddRabbitMQ(sp =>
+        {
+            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = new Uri(rabbitConn) };
+            return factory.CreateConnectionAsync().GetAwaiter().GetResult();
+        });
+}
 
 var app = builder.Build();
 
@@ -80,7 +109,14 @@ app.MapGet("/api/delivery/health", () => Results.Ok(new { status = "healthy", se
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<DeliveryDbContext>();
-    await db.Database.MigrateAsync();
+    if (useInMemory)
+    {
+        await db.Database.EnsureCreatedAsync();
+    }
+    else
+    {
+        await db.Database.MigrateAsync();
+    }
 }
 
 Log.Information("Deuna Delivery Service started successfully");
