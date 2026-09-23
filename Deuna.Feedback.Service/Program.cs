@@ -2,6 +2,7 @@ using Deuna.Feedback.Service.Consumers;
 using Deuna.Feedback.Service.Endpoints;
 using Deuna.Feedback.Service.Models;
 using Deuna.Feedback.Service.Services;
+using Deuna.Shared.Messaging;
 using FluentValidation;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -49,23 +50,18 @@ builder.Services.AddMassTransit(x =>
     {
         x.UsingInMemory((context, cfg) =>
         {
-            cfg.ConfigureEndpoints(context);
+            cfg.ConfigureEndpoints(context, new KebabCaseEndpointNameFormatter("feedback", false));
         });
         return;
     }
 
     x.UsingRabbitMq((context, cfg) =>
     {
-        var host = builder.Configuration["RabbitMQ:Host"] ?? "localhost";
-        var port = builder.Configuration.GetValue<int>("RabbitMQ:Port", 5672);
-        var username = builder.Configuration["RabbitMQ:Username"] ?? "deuna";
-        var password = builder.Configuration["RabbitMQ:Password"] ?? "rabbitmq_dev_2026";
-        var vhost = builder.Configuration["RabbitMQ:VirtualHost"] ?? "deuna";
+        cfg.Host(RabbitMqConnection.BuildUri(builder.Configuration));
 
-        var uri = new Uri($"amqp://{username}:{password}@{host}:{port}/{vhost}");
-        cfg.Host(uri);
-
-        cfg.ConfigureEndpoints(context);
+        // Prefijo por servicio en los nombres de cola. Sin esto, Delivery y Feedback
+        // consumen de la MISMA cola `PedidoCreado` y cada evento lo recibe uno solo.
+        cfg.ConfigureEndpoints(context, new KebabCaseEndpointNameFormatter("feedback", false));
     });
 });
 
@@ -118,11 +114,13 @@ static void ConfigureHealthChecks(IServiceCollection services, IConfiguration co
         return;
     }
 
-    var rabbitConn = configuration.GetConnectionString("RabbitMQ") ?? "amqp://deuna:***@localhost:5672/deuna";
+    var rabbitUri = RabbitMqConnection.BuildUri(configuration);
     services.AddHealthChecks()
         .AddRabbitMQ(sp =>
         {
-            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = new Uri(rabbitConn) };
+            // URI real de configuración: el placeholder enmascarado apuntaba a localhost
+            // con contraseña `***`, así que el health check fallaba siempre en el contenedor.
+            var factory = new RabbitMQ.Client.ConnectionFactory() { Uri = rabbitUri };
             return factory.CreateConnectionAsync().GetAwaiter().GetResult();
         });
 }
