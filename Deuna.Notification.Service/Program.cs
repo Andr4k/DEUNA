@@ -19,15 +19,6 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .Enrich.FromLogContext()
     .WriteTo.Console());
 
-// La sobrecarga con delegado configura el logger del host pero NO asigna el logger
-// estático, así que sin esta línea las llamadas Log.X de este archivo no se emiten.
-Log.Logger = new LoggerConfiguration()
-    .ReadFrom.Configuration(builder.Configuration)
-    .WriteTo.Console()
-    .CreateLogger();
-
-Log.Information("Starting Deuna Notification Service");
-
 builder.Services.AddOpenApi();
 
 // Los flags se leen una sola vez y antes de registrar la base de datos.
@@ -118,6 +109,10 @@ if (!useInMemoryMessaging)
 
 var app = builder.Build();
 
+// El logger estatico de Serilog solo queda enganchado cuando el host esta construido:
+// una llamada a Log.X antes de Build() cae a un logger silencioso y se pierde.
+app.Logger.LogInformation("Starting Deuna Notification Service");
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -150,7 +145,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-Log.Information("Deuna Notification Service started successfully");
+app.Logger.LogInformation("Deuna Notification Service started successfully");
 await app.RunAsync();
 
 public partial class Program { }
