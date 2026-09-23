@@ -31,7 +31,12 @@ builder.Services.AddDbContext<DeliveryDbContext>(options =>
 
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
         ?? "Host=localhost;Port=5434;Database=deuna_delivery;Username=deuna_user;Password=deuna_dev_2026";
-    options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsAssembly("Deuna.Delivery.Service"));
+    options.UseNpgsql(connectionString, npgsql =>
+    {
+        // Requerido para mapear propiedades NetTopologySuite (Point) a geography
+        npgsql.UseNetTopologySuite();
+        npgsql.MigrationsAssembly("Deuna.Delivery.Service");
+    });
 });
 
 if (!useInMemory)
