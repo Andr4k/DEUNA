@@ -35,7 +35,7 @@ public class OrdersDbContext : DbContext
             entity.Property(e => e.CostoEnvio).HasPrecision(18, 2);
             entity.Property(e => e.Total).HasPrecision(18, 2);
             entity.Property(e => e.DireccionEntregaId).IsRequired();
-            entity.Property(e => e.QrCodigo).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.QrCodigo).IsRequired().HasMaxLength(36);
             entity.Property(e => e.NotasCliente).HasMaxLength(500);
             entity.Property(e => e.NotasRestaurante).HasMaxLength(500);
             entity.Property(e => e.FechaCreacion).IsRequired();
@@ -46,7 +46,7 @@ public class OrdersDbContext : DbContext
             entity.HasIndex(e => e.Codigo).IsUnique();
 
             entity.HasOne(e => e.DireccionEntrega)
-                .WithMany()
+                .WithMany(d => d.Pedidos)
                 .HasForeignKey(e => e.DireccionEntregaId)
                 .OnDelete(DeleteBehavior.Restrict);
 
