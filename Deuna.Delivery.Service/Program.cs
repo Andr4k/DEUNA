@@ -19,8 +19,6 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .Enrich.FromLogContext()
     .WriteTo.Console());
 
-Log.Information("Starting Deuna Delivery Service");
-
 builder.Services.AddOpenApi();
 
 var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
@@ -119,6 +117,10 @@ if (!useInMemory)
 
 var app = builder.Build();
 
+// El logger estatico de Serilog solo queda enganchado cuando el host esta construido:
+// una llamada a Log.X antes de Build() cae a un logger silencioso y se pierde.
+app.Logger.LogInformation("Starting Deuna Delivery Service");
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -155,7 +157,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-Log.Information("Deuna Delivery Service started successfully");
+app.Logger.LogInformation("Deuna Delivery Service started successfully");
 await app.RunAsync();
 
 public partial class Program { }
