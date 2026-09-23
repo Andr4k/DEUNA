@@ -88,6 +88,26 @@ services:
     networks:
       - deuna-network
 
+  postgres-notification:
+    image: postgres:16-alpine
+    container_name: deuna-postgres-notification
+    environment:
+      POSTGRES_DB: deuna_notification
+      POSTGRES_USER: deuna_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-deuna_dev_2026}
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres-notification-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deuna_user -d deuna_notification"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - deuna-network
+
   # Redis para tracking GPS y cache
   redis:
     image: redis:7-alpine
@@ -158,6 +178,7 @@ services:
       ReverseProxy__Clusters__orders-cluster__Destinations__orders-service__Address: "http://orders:8080"
       ReverseProxy__Clusters__delivery-cluster__Destinations__delivery-service__Address: "http://delivery:8080"
       ReverseProxy__Clusters__feedback-cluster__Destinations__feedback-service__Address: "http://feedback:8080"
+      ReverseProxy__Clusters__notifications-cluster__Destinations__notification-service__Address: "http://notification:8080"
     depends_on:
       postgres-identity:
         condition: service_healthy
@@ -285,6 +306,39 @@ services:
       - deuna-network
     restart: unless-stopped
 
+  notification:
+    build:
+      context: .
+      dockerfile: Deuna.Notification.Service/Dockerfile
+    container_name: deuna-notification
+    ports:
+      - "5005:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      ConnectionStrings__DefaultConnection: "Host=postgres-notification;Port=5432;Database=deuna_notification;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: ${RABBITMQ_USER:-deuna}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq_dev_2026}
+      RabbitMQ__VirtualHost: deuna
+      Jwt__SecretKey: "DeunaSuperSecretKey2026!@#$%^&*()_+-=[]{}|;:,.<>?"
+      Jwt__Issuer: "Deuna.Identity"
+      Jwt__Audience: "Deuna.Api"
+      # Push real: sin las dos claves el servicio usa el emisor de log (no habla con FCM).
+      Fcm__ProjectId: ${FCM_PROJECT_ID:-}
+      Fcm__ServiceAccountJson: ${FCM_SERVICE_ACCOUNT_JSON:-}
+    depends_on:
+      postgres-notification:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      gateway:
+        condition: service_started
+    networks:
+      - deuna-network
+    restart: unless-stopped
+
 volumes:
   postgres-identity-data:
     driver: local
@@ -293,6 +347,8 @@ volumes:
   postgres-delivery-data:
     driver: local
   postgres-feedback-data:
+    driver: local
+  postgres-notification-data:
     driver: local
   redis-data:
     driver: local

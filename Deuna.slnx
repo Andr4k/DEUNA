@@ -5,6 +5,8 @@
   <Project Path="Deuna.Delivery.Service/Deuna.Delivery.Service.csproj" />
   <Project Path="Deuna.Feedback.Service/Deuna.Feedback.Service.csproj" />
   <Project Path="Deuna.Gateway/Deuna.Gateway.csproj" />
+  <Project Path="Deuna.Notification.Service.Tests/Deuna.Notification.Service.Tests.csproj" />
+  <Project Path="Deuna.Notification.Service/Deuna.Notification.Service.csproj" />
   <Project Path="Deuna.Identity.Service/Deuna.Identity.Service.csproj" />
   <Project Path="Deuna.Orders.Service.Tests/Deuna.Orders.Service.Tests.csproj" />
   <Project Path="Deuna.Orders.Service/Deuna.Orders.Service.csproj" />
