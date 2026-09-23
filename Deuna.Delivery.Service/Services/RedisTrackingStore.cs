@@ -23,6 +23,12 @@ public class RedisTrackingStore : ITrackingStore
     /// <summary>TTL de la telemetría (1 hora).</summary>
     public const int TtlSegundos = 3600;
 
+    /// <summary>
+    /// Tope de candidatos que devuelve el matching. Existe para no traer un radio entero
+    /// de repartidores cuando el pedido se resuelve con los primeros por cercanía.
+    /// </summary>
+    public const int MaxCandidatos = 50;
+
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisTrackingStore> _logger;
 
@@ -104,11 +110,65 @@ public class RedisTrackingStore : ITrackingStore
             ActualizadoEn: await LeerTimestampAsync(db, miembro));
     }
 
+    public async Task<IReadOnlyList<UbicacionGps>> BuscarCandidatosAsync(double latitud, double longitud, double radioKm, CancellationToken cancellationToken = default)
+    {
+        var db = _redis.GetDatabase();
+
+        // GEORADIUS tracking:riders {lon} {lat} {radio} km WITHDIST ASC
+        var resultados = await db.GeoRadiusAsync(
+            ClaveRepartidores,
+            longitude: longitud,
+            latitude: latitud,
+            radius: radioKm,
+            unit: GeoUnit.Kilometers,
+            count: MaxCandidatos,
+            order: Order.Ascending,
+            options: GeoRadiusOptions.WithCoordinates | GeoRadiusOptions.WithDistance);
+
+        if (resultados is null || resultados.Length == 0)
+        {
+            return [];
+        }
+
+        // Los timestamps se leen de una sola vez: pedirlos por candidato sería una
+        // ida y vuelta a Redis por cada repartidor del radio.
+        var timestamps = (await db.HashGetAllAsync(ClaveTimestamps))
+            .ToDictionary(h => h.Name.ToString(), h => ParsearTimestamp(h.Value));
+
+        var candidatos = new List<UbicacionGps>(resultados.Length);
+        foreach (var resultado in resultados)
+        {
+            if (resultado.Position is null)
+            {
+                continue;
+            }
+
+            var miembro = resultado.Member.ToString();
+            if (!Guid.TryParse(miembro, out var riderId))
+            {
+                _logger.LogWarning("Miembro no interpretable como Guid en {Clave}: {Miembro}", ClaveRepartidores, miembro);
+                continue;
+            }
+
+            candidatos.Add(new UbicacionGps(
+                riderId,
+                resultado.Position.Value.Latitude,
+                resultado.Position.Value.Longitude,
+                DistanciaMetros: resultado.Distance * 1000, // GEORADIUS devuelve km
+                ActualizadoEn: timestamps.TryGetValue(miembro, out var timestamp) ? timestamp : null));
+        }
+
+        return candidatos;
+    }
+
     private static async Task<DateTime?> LeerTimestampAsync(IDatabase db, string miembro)
     {
         var valor = await db.HashGetAsync(ClaveTimestamps, miembro);
-        return valor.HasValue && DateTime.TryParse(valor.ToString(), null, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp)
+        return valor.HasValue ? ParsearTimestamp(valor) : null;
+    }
+
+    private static DateTime? ParsearTimestamp(RedisValue valor) =>
+        valor.HasValue && DateTime.TryParse(valor.ToString(), null, System.Globalization.DateTimeStyles.RoundtripKind, out var timestamp)
             ? timestamp
             : null;
-    }
 }
