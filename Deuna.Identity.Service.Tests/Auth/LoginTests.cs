@@ -27,6 +27,28 @@ public class LoginTests : IClassFixture<TestWebApplicationFactory>
 
     private HttpClient CreateClient() => _factory.CreateClient();
 
+    /// <summary>
+    /// Emite un código de autorización y lo valida, como hace el área comercial antes de
+    /// que el restaurante envíe sus datos. Sin código válido no hay registro (FR-001.8).
+    /// </summary>
+    private async Task<string> ObtenerTokenDeContinuidadAsync()
+    {
+        using var admin = _factory.CreateClient();
+        admin.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestJwt.CreateAdminToken());
+        var emision = await admin.PostAsJsonAsync("/api/v1/identity/authorization-codes",
+            new EmitAuthorizationCodeRequest(null));
+        var emisionJson = await emision.Content.ReadFromJsonAsync<JsonElement>();
+        var codigo = emisionJson.GetProperty("data").GetProperty("codigo").GetString()!;
+
+        using var anonimo = _factory.CreateClient();
+        var validacion = await anonimo.PostAsJsonAsync(
+            "/api/v1/identity/register/restaurant/validate-code",
+            new ValidateAuthorizationCodeRequest(codigo));
+        var validacionJson = await validacion.Content.ReadFromJsonAsync<JsonElement>();
+        return validacionJson.GetProperty("data").GetProperty("continuidadToken").GetString()!;
+    }
+
     private async Task ResetDatabaseAsync()
     {
         using var scope = _factory.Services.CreateScope();
@@ -49,7 +71,8 @@ public class LoginTests : IClassFixture<TestWebApplicationFactory>
             DireccionSede: "Calle 123 #45-67",
             Ciudad: "Bogotá",
             Latitud: 4.6097m,
-            Longitud: -74.0817m
+            Longitud: -74.0817m,
+            ContinuidadToken: await ObtenerTokenDeContinuidadAsync()
         );
 
         var response = await client.PostAsJsonAsync("/api/v1/identity/register/restaurant", request);

@@ -28,6 +28,9 @@ public class IdentityDbContext : DbContext
     // Auth
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    // Alta de restaurantes
+    public DbSet<CodigoAutorizacion> CodigosAutorizacion => Set<CodigoAutorizacion>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -313,6 +316,24 @@ public class IdentityDbContext : DbContext
                 .WithMany(u => u.RefreshTokens)
                 .HasForeignKey(e => e.UsuarioId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ========== CÓDIGOS DE AUTORIZACIÓN ==========
+        modelBuilder.Entity<CodigoAutorizacion>(entity =>
+        {
+            entity.ToTable("codigos_autorizacion");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Codigo).IsRequired().HasMaxLength(32);
+            entity.Property(e => e.Estado).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.FechaEmision).IsRequired();
+            entity.Property(e => e.FechaVencimiento).IsRequired();
+            entity.Property(e => e.FechaUso);
+            entity.Property(e => e.EmitidoPorUsuarioId);
+            entity.Property(e => e.RestauranteId);
+            entity.Property(e => e.Notas).HasMaxLength(200);
+            entity.HasIndex(e => e.Codigo).IsUnique().HasDatabaseName("ix_codigos_autorizacion_codigo");
+            entity.HasIndex(e => e.Estado).HasDatabaseName("ix_codigos_autorizacion_estado");
+            entity.HasIndex(e => e.RestauranteId).HasDatabaseName("ix_codigos_autorizacion_restaurante");
         });
     }
 }

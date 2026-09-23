@@ -14,7 +14,13 @@ public record RegisterRestaurantRequest(
     [Required, MaxLength(500)] string DireccionSede,
     [Required, MaxLength(100)] string Ciudad,
     [Required] decimal Latitud,
-    [Required] decimal Longitud
+    [Required] decimal Longitud,
+
+    /// <summary>
+    /// Token de continuidad que devuelve la validación del código de autorización.
+    /// Es obligatorio: sin un código válido no se crea la cuenta (FR-001.8 a FR-001.10).
+    /// </summary>
+    [Required, MaxLength(2048)] string ContinuidadToken
 );
 
 public record RegisterRiderRequest(
@@ -107,4 +113,15 @@ public record AuthResponse(
     bool Success,
     string Message,
     object? Data = null
+);
+
+/// <summary>Emisión de un código de autorización por el área comercial (rol ADMIN).</summary>
+public record EmitAuthorizationCodeRequest(
+    [MaxLength(200)] string? Notas = null,
+    [Range(1, 365)] int? VigenciaDias = null
+);
+
+/// <summary>Primer paso del alta: validar el código recibido del área comercial.</summary>
+public record ValidateAuthorizationCodeRequest(
+    [Required, MaxLength(32)] string Codigo
 );

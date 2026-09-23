@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="Deuna.Delivery.Service.Tests/Deuna.Delivery.Service.Tests.csproj" />
   <Project Path="Deuna.Feedback.Service.Tests/Deuna.Feedback.Service.Tests.csproj" />
+  <Project Path="Deuna.Identity.Service.Tests/Deuna.Identity.Service.Tests.csproj" />
   <Project Path="Deuna.Delivery.Service/Deuna.Delivery.Service.csproj" />
   <Project Path="Deuna.Feedback.Service/Deuna.Feedback.Service.csproj" />
   <Project Path="Deuna.Gateway/Deuna.Gateway.csproj" />

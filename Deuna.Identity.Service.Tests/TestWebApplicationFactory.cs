@@ -41,6 +41,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["ConnectionStrings:DefaultConnection"] = "InMemory",
                 ["UseInMemoryDatabase"] = "true",
+                // Un almacén InMemory por instancia de factory (una por clase de test). Va
+                // aquí y no en una variable de entorno porque el entorno es global del
+                // proceso: todas las factories leerían el mismo nombre y volverían a
+                // compartir datos. Program.cs lee esta clave dentro del lambda diferido de
+                // AddDbContext, así que ya ve la configuración de esta instancia.
+                ["InMemoryDatabaseName"] = $"identity-tests-{Guid.NewGuid():N}",
                 ["Jwt:SecretKey"] = JwtSecret,
                 ["Jwt:Issuer"] = "Deuna.Test",
                 ["Jwt:Audience"] = "Deuna.Test",
@@ -50,13 +56,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // El DbContext ya lo registra Program.cs en modo InMemory; se garantiza que no
-            // quede ningún descriptor de Npgsql apuntando a una base real.
-            var npgsqlDescriptors = services.Where(d =>
-                d.ServiceType.FullName?.Contains("Npgsql") == true ||
-                d.ServiceType.FullName?.Contains("MigrationsAssembly") == true
-            ).ToList();
-            foreach (var d in npgsqlDescriptors) services.Remove(d);
+            // El DbContext ya lo registra Program.cs en modo InMemory (condicional al flag),
+            // así que no hay ningún descriptor de Npgsql que retirar. El borrado por nombre
+            // que había aquí no alcanzaba a los servicios internos del proveedor y era
+            // exactamente lo que dejaba dos proveedores registrados.
         });
     }
 
@@ -68,6 +71,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         {
             Environment.SetEnvironmentVariable("UseInMemoryDatabase", null);
             Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", null);
+            Environment.SetEnvironmentVariable("InMemoryDatabaseName", null);
             Environment.SetEnvironmentVariable("Jwt__SecretKey", null);
             Environment.SetEnvironmentVariable("Jwt__Issuer", null);
             Environment.SetEnvironmentVariable("Jwt__Audience", null);

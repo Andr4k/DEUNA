@@ -22,42 +22,29 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         _factory = factory;
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient();
+    private HttpClient CreateClient()
+    {
+        // Token JWT real firmado con la misma clave que valida el servicio.
+        // El literal "test-restaurant-token" que usaban los tests no es un token válido.
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", TestJwt.CreateRestaurantToken(TestData.RestauranteId));
+        return client;
+    }
 
     private async Task ResetDatabaseAsync()
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
-        await db.Database.EnsureDeletedAsync();
-        await db.Database.EnsureCreatedAsync();
+        await TestData.ResetAsync(db);
     }
 
     private async Task SeedRestauranteAsync()
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
-
-        var restaurante = new RestauranteReplicado
-        {
-            Id = Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
-            NombreComercial = "Demo Restaurant",
-            RazonSocial = "Demo Restaurant S.A.S.",
-            Nit = "900123456-7",
-            DireccionSede = "Calle 45 #23-10",
-            Ciudad = "Bogotá",
-            Latitud = 4.6097100m,
-            Longitud = -74.0817500m,
-            Ubicacion = new NetTopologySuite.Geometries.Point(-74.0817500, 4.6097100) { SRID = 4326 },
-            RadioCoberturaKm = 10.0m,
-            AceptaPedidos = true,
-            Activo = true,
-            HoraApertura = new TimeSpan(8, 0, 0),
-            HoraCierre = new TimeSpan(22, 0, 0),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        db.RestaurantesReplicados.Add(restaurante);
-        await db.SaveChangesAsync();
+        await TestData.SeedRestauranteAsync(db);
     }
 
     [Fact]
@@ -68,12 +55,8 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         await SeedRestauranteAsync();
         using var client = CreateClient();
 
-        // Simular autenticación como RESTAURANT
-        client.DefaultRequestHeaders.Authorization = 
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "test-restaurant-token");
-
         var request = new CrearPedidoRequest(
-            RestauranteId: Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
+            RestauranteId: TestData.RestauranteId,
             Items: new List<CrearItemPedidoRequest>
             {
                 new("Hamburguesa Clásica", "Carne 180g, queso, lechuga, tomate", 2, 25000m),
@@ -123,11 +106,9 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         await ResetDatabaseAsync();
         // NO seed restaurante
         using var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization = 
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "test-restaurant-token");
 
         var request = new CrearPedidoRequest(
-            RestauranteId: Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"), // No existe
+            RestauranteId: TestData.RestauranteId, // No existe
             Items: new List<CrearItemPedidoRequest>
             {
                 new("Hamburguesa", "Desc", 1, 25000m)
@@ -157,11 +138,9 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         await ResetDatabaseAsync();
         await SeedRestauranteAsync();
         using var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization = 
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "test-restaurant-token");
 
         var request = new CrearPedidoRequest(
-            RestauranteId: Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
+            RestauranteId: TestData.RestauranteId,
             Items: new List<CrearItemPedidoRequest>(), // Vacío
             DireccionEntrega: new CrearDireccionEntregaRequest(
                 Calle: "Calle 45", Numero: "#23-10", Interior: null, Referencia: null,
@@ -188,11 +167,9 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         await ResetDatabaseAsync();
         await SeedRestauranteAsync();
         using var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization = 
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "test-restaurant-token");
 
         var request = new CrearPedidoRequest(
-            RestauranteId: Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
+            RestauranteId: TestData.RestauranteId,
             Items: new List<CrearItemPedidoRequest>
             {
                 new("Hamburguesa", "Desc", 1, 25000m)
@@ -223,11 +200,9 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         await ResetDatabaseAsync();
         await SeedRestauranteAsync();
         using var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization = 
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "test-restaurant-token");
 
         var request = new CrearPedidoRequest(
-            RestauranteId: Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
+            RestauranteId: TestData.RestauranteId,
             Items: new List<CrearItemPedidoRequest>
             {
                 new("Hamburguesa", "Desc", 1, 25000m)
@@ -258,11 +233,9 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         await ResetDatabaseAsync();
         await SeedRestauranteAsync();
         using var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization = 
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", "test-restaurant-token");
 
         var request = new CrearPedidoRequest(
-            RestauranteId: Guid.Parse("a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6"),
+            RestauranteId: TestData.RestauranteId,
             Items: new List<CrearItemPedidoRequest>
             {
                 new("Hamburguesa", "Desc", 2, 25000m),

@@ -14,14 +14,44 @@ namespace Deuna.Identity.Service.Tests.Auth;
 /// </summary>
 public class RegisterTests : IClassFixture<TestWebApplicationFactory>
 {
+    private readonly TestWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
     public RegisterTests(TestWebApplicationFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
-    private static RegisterRestaurantRequest RequestRestaurante(string? email = null) => new(
+    private HttpClient CreateAdminClient()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", TestJwt.CreateAdminToken());
+        return client;
+    }
+
+    /// <summary>
+    /// Emite un código de autorización y lo valida, como hace el área comercial con el
+    /// restaurante antes de que este envíe sus datos (FR-001.8 a FR-001.10).
+    /// </summary>
+    private async Task<string> ObtenerTokenDeContinuidadAsync()
+    {
+        using var admin = CreateAdminClient();
+        var emision = await admin.PostAsJsonAsync("/api/v1/identity/authorization-codes",
+            new EmitAuthorizationCodeRequest(null));
+        var emisionJson = await emision.Content.ReadFromJsonAsync<JsonElement>();
+        var codigo = emisionJson.GetProperty("data").GetProperty("codigo").GetString()!;
+
+        using var client = _factory.CreateClient();
+        var validacion = await client.PostAsJsonAsync(
+            "/api/v1/identity/register/restaurant/validate-code",
+            new ValidateAuthorizationCodeRequest(codigo));
+        var validacionJson = await validacion.Content.ReadFromJsonAsync<JsonElement>();
+        return validacionJson.GetProperty("data").GetProperty("continuidadToken").GetString()!;
+    }
+
+    private async Task<RegisterRestaurantRequest> RequestRestauranteAsync(string? email = null) => new(
         Email: email ?? $"resto-{Guid.NewGuid():N}@deuna.test",
         Password: "Deuna2026*",
         FirstName: "Andres",
@@ -33,7 +63,8 @@ public class RegisterTests : IClassFixture<TestWebApplicationFactory>
         DireccionSede: "Calle 45 #23-10",
         Ciudad: "Bogota",
         Latitud: 4.6097m,
-        Longitud: -74.0817m);
+        Longitud: -74.0817m,
+        ContinuidadToken: await ObtenerTokenDeContinuidadAsync());
 
     private async Task<(HttpStatusCode Codigo, JsonElement? Data)> RegistrarAsync(RegisterRestaurantRequest request)
     {
@@ -46,7 +77,7 @@ public class RegisterTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task Registro_DevuelveTokenDeVerificacion()
     {
-        var (codigo, data) = await RegistrarAsync(RequestRestaurante());
+        var (codigo, data) = await RegistrarAsync(await RequestRestauranteAsync());
 
         codigo.Should().Be(HttpStatusCode.OK);
         data!.Value.GetProperty("verificationToken").GetString().Should().NotBeNullOrWhiteSpace();
@@ -56,7 +87,7 @@ public class RegisterTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task VerificarEmail_ConElTokenDelRegistro_ConfirmaLaCuenta()
     {
-        var (_, data) = await RegistrarAsync(RequestRestaurante());
+        var (_, data) = await RegistrarAsync(await RequestRestauranteAsync());
         var token = data!.Value.GetProperty("verificationToken").GetString();
 
         var response = await _client.PostAsJsonAsync("/api/v1/identity/verify-email", new VerifyEmailRequest(token!));
@@ -78,10 +109,16 @@ public class RegisterTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task Registro_ConEmailDuplicado_DevuelveErrorYNoCreaOtroUsuario()
     {
-        var request = RequestRestaurante();
-        await RegistrarAsync(request);
+        var email = $"resto-{Guid.NewGuid():N}@deuna.test";
 
-        var response = await _client.PostAsJsonAsync("/api/v1/identity/register/restaurant", request);
+        // Primer alta, con su propio código de autorización.
+        var primero = await RegistrarAsync(await RequestRestauranteAsync(email));
+        primero.Codigo.Should().Be(HttpStatusCode.OK);
+
+        // Segundo intento con un código nuevo pero el mismo email: el rechazo debe ser por
+        // el email duplicado. Reusar el token anterior fallaría antes, por código ya usado.
+        var response = await _client.PostAsJsonAsync("/api/v1/identity/register/restaurant",
+            await RequestRestauranteAsync(email));
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
