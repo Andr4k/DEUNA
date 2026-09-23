@@ -1,5 +1,8 @@
+using Deuna.Delivery.Service.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Deuna.Delivery.Service.Tests;
 
@@ -23,6 +26,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        builder.ConfigureServices(services =>
+        {
+            // Sin Redis no hay telemetría: se reemplaza el store real por un doble para que
+            // el grafo sea resoluble. El matching con Redis real se prueba en Assignment/.
+            services.RemoveAll<ITrackingStore>();
+            services.AddScoped<ITrackingStore, TrackingStoreNulo>();
+        });
     }
 
     protected override void Dispose(bool disposing)

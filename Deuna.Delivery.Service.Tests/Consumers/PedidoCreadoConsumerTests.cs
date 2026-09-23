@@ -1,4 +1,5 @@
 using Deuna.Delivery.Service.Consumers;
+using Deuna.Delivery.Service.Services;
 using Deuna.Shared.Events;
 using Deuna.Delivery.Service.Models;
 using FluentAssertions;
@@ -36,13 +37,32 @@ public class PedidoCreadoConsumerTests
         QrCodigo: "qr-token-abc123",
         OccurredAt: DateTime.UtcNow);
 
+    /// <summary>
+    /// Doble de la asignación: estos tests verifican la proyección del pedido, no el
+    /// matching por cercanía (que tiene su propia suite en Assignment/).
+    /// </summary>
+    private sealed class AsignacionNula : IAsignacionService
+    {
+        public Task<ResultadoAsignacion> IntentarAsignarAsync(Guid pedidoId, Guid? excluirRepartidorId = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ResultadoAsignacion(false, "sin candidatos (doble de test)"));
+
+        public Task<int> ReintentarPendientesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
+
+        public Task<ResultadoAsignacion> RechazarAsync(Guid pedidoId, Guid repartidorId, string? motivo, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ResultadoAsignacion(false, "no aplica"));
+
+        public Task<IReadOnlyList<PedidoAsignadoDto>> ObtenerAsignadosAsync(Guid repartidorId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<PedidoAsignadoDto>>([]);
+    }
+
     [Fact]
     public async Task Consume_PedidoCreado_ProjectsPedidoAsBuscando()
     {
         // Arrange
         var db = CreateDbContext();
         var harness = new InMemoryTestHarness();
-        harness.Consumer(() => new PedidoCreadoConsumer(db, NullLogger<PedidoCreadoConsumer>.Instance));
+        harness.Consumer(() => new PedidoCreadoConsumer(db, new AsignacionNula(), NullLogger<PedidoCreadoConsumer>.Instance));
 
         await harness.Start();
         try
@@ -70,7 +90,7 @@ public class PedidoCreadoConsumerTests
         // Arrange
         var db = CreateDbContext();
         var harness = new InMemoryTestHarness();
-        harness.Consumer(() => new PedidoCreadoConsumer(db, NullLogger<PedidoCreadoConsumer>.Instance));
+        harness.Consumer(() => new PedidoCreadoConsumer(db, new AsignacionNula(), NullLogger<PedidoCreadoConsumer>.Instance));
 
         var evento = CreateEvent();
 
@@ -103,7 +123,7 @@ public class PedidoCreadoConsumerTests
         // Arrange
         var db = CreateDbContext();
         var harness = new InMemoryTestHarness();
-        harness.Consumer(() => new PedidoCreadoConsumer(db, NullLogger<PedidoCreadoConsumer>.Instance));
+        harness.Consumer(() => new PedidoCreadoConsumer(db, new AsignacionNula(), NullLogger<PedidoCreadoConsumer>.Instance));
 
         var evento = CreateEvent();
 
