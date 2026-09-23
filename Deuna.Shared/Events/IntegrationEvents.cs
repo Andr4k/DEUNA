@@ -54,6 +54,22 @@ public record PedidoCancelado(
 );
 
 /// <summary>
+/// Publicado por Identity cuando se registra un restaurante. Contrato v1.
+/// Consumido por Orders para replicar el restaurante y poder validar sus pedidos.
+/// </summary>
+public record RestauranteRegistrado(
+    Guid RestauranteId,
+    string NombreComercial,
+    string RazonSocial,
+    string Nit,
+    string DireccionSede,
+    string Ciudad,
+    double Latitud,
+    double Longitud,
+    DateTime OccurredAt
+);
+
+/// <summary>
 /// Publicado por Delivery cuando un repartidor acepta un pedido disponible. Contrato v1.
 /// </summary>
 public record PedidoAsignado(
