@@ -9,12 +9,31 @@ public class DeliveryDbContext : DbContext
 
     public DbSet<Delivery> Deliveries => Set<Delivery>();
     public DbSet<DeliveryTracking> DeliveryTrackings => Set<DeliveryTracking>();
+    public DbSet<PedidoDisponible> PedidosDisponibles => Set<PedidoDisponible>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.HasPostgresExtension("postgis");
+
+        modelBuilder.Entity<PedidoDisponible>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PedidoId).IsRequired();
+            entity.Property(e => e.Codigo).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ClienteId).IsRequired();
+            entity.Property(e => e.RestauranteId).IsRequired();
+            entity.Property(e => e.Total).HasPrecision(18, 2);
+            entity.Property(e => e.Estado).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.QrCodigo).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.FechaCreacion).IsRequired();
+
+            // Un pedido de Orders se proyecta una sola vez (idempotencia ante redelivery).
+            entity.HasIndex(e => e.PedidoId).IsUnique();
+            entity.HasIndex(e => e.Estado);
+            entity.HasIndex(e => e.RestauranteId);
+        });
 
         modelBuilder.Entity<Delivery>(entity =>
         {

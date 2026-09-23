@@ -13,8 +13,9 @@ WORKDIR "/src/Deuna.Feedback.Service"
 RUN dotnet restore "Deuna.Feedback.Service.csproj"
 
 # Copiar SOLO el código fuente necesario
-COPY Deuna.Feedback.Service/ Deuna.Feedback.Service/
-COPY Deuna.Shared/ Deuna.Shared/
+# Destino absoluto: evita anidar el proyecto dentro de sí mismo (WORKDIR es /src/Deuna.Feedback.Service)
+COPY Deuna.Feedback.Service/ /src/Deuna.Feedback.Service/
+COPY Deuna.Shared/ /src/Deuna.Shared/
 
 # Build y publish
 RUN dotnet publish "Deuna.Feedback.Service.csproj" -c Release -o /app/publish --no-restore /p:UseAppHost=false

@@ -46,9 +46,9 @@ services:
     networks:
       - deuna-network
 
-  # PostgreSQL para Delivery Service
+  # PostgreSQL con PostGIS para Delivery Service (tracking GPS / geography)
   postgres-delivery:
-    image: postgres:16-alpine
+    image: postgis/postgis:16-3.4-alpine
     container_name: deuna-postgres-delivery
     environment:
       POSTGRES_DB: deuna_delivery

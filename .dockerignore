@@ -1,0 +1,59 @@
+# .dockerignore - Optimiza el contexto de build de Docker
+
+# Build outputs (recursivo para todos los subdirectorios)
+**/bin/
+**/obj/
+**/out/
+
+# IDE/Editor
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Testing
+TestResults/
+*.trx
+coverage/
+
+# NuGet
+packages/
+*.nupkg
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Scripts
+scripts/*.sh
+scripts/*.sql
+
+# Environment
+.env
+.env.*
+
+# Database
+*.db
+*.sqlite
+
+# Tests (no van en build de servicios)
+Deuna.Shared.Tests/
+Deuna.Identity.Service.Tests/
