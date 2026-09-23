@@ -13,8 +13,9 @@ WORKDIR "/src/Deuna.Orders.Service"
 RUN dotnet restore "Deuna.Orders.Service.csproj"
 
 # Copiar SOLO el código fuente necesario
-COPY Deuna.Orders.Service/ Deuna.Orders.Service/
-COPY Deuna.Shared/ Deuna.Shared/
+# Destino absoluto: evita anidar el proyecto dentro de sí mismo (WORKDIR es /src/Deuna.Orders.Service)
+COPY Deuna.Orders.Service/ /src/Deuna.Orders.Service/
+COPY Deuna.Shared/ /src/Deuna.Shared/
 
 # Build y publish
 RUN dotnet publish "Deuna.Orders.Service.csproj" -c Release -o /app/publish --no-restore /p:UseAppHost=false

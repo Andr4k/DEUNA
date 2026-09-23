@@ -13,8 +13,9 @@ WORKDIR "/src/Deuna.Gateway"
 RUN dotnet restore "Deuna.Gateway.csproj"
 
 # Copiar SOLO el código fuente necesario
-COPY Deuna.Gateway/ Deuna.Gateway/
-COPY Deuna.Shared/ Deuna.Shared/
+# Destino absoluto: evita anidar el proyecto dentro de sí mismo (WORKDIR es /src/Deuna.Gateway)
+COPY Deuna.Gateway/ /src/Deuna.Gateway/
+COPY Deuna.Shared/ /src/Deuna.Shared/
 
 # Build y publish
 RUN dotnet publish "Deuna.Gateway.csproj" -c Release -o /app/publish --no-restore /p:UseAppHost=false

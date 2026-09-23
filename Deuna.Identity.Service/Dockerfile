@@ -13,8 +13,9 @@ WORKDIR "/src/Deuna.Identity.Service"
 RUN dotnet restore "Deuna.Identity.Service.csproj"
 
 # Copiar SOLO el código fuente necesario (excluye otros servicios)
-COPY Deuna.Identity.Service/ Deuna.Identity.Service/
-COPY Deuna.Shared/ Deuna.Shared/
+# Destino absoluto: evita anidar el proyecto dentro de sí mismo (WORKDIR es /src/Deuna.Identity.Service)
+COPY Deuna.Identity.Service/ /src/Deuna.Identity.Service/
+COPY Deuna.Shared/ /src/Deuna.Shared/
 
 # Build y publish en un solo paso para evitar problemas de permisos
 RUN dotnet publish "Deuna.Identity.Service.csproj" -c Release -o /app/publish --no-restore /p:UseAppHost=false
