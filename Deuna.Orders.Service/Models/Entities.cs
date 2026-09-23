@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Deuna.Shared.Domain;
 using NetTopologySuite.Geometries;
 
 namespace Deuna.Orders.Service.Models;
@@ -25,7 +26,7 @@ public class Pedido
 
     [Required]
     [MaxLength(50)]
-    public string Estado { get; set; } = "Pendiente"; // Pendiente, Confirmado, Preparando, Listo, EnCamino, Entregado, Cancelado
+    public string Estado { get; set; } = EstadosPedido.Buscando;
 
     [Required]
     [Column(TypeName = "decimal(18,2)")]

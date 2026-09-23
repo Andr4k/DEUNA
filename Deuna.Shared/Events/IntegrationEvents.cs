@@ -39,18 +39,26 @@ public record PedidoCreado(
 );
 
 /// <summary>
-/// Publicado cuando cambia el estado de un pedido. Contrato v1.
+/// Publicado cuando cambia el estado de un pedido. Contrato v2.
 ///
-/// Lo publican dos servicios: Orders (transiciones del pedido) y Delivery (el paso a
-/// <c>EnRuta</c> del ciclo de entrega, TASK-305). Consumido por Feedback para mantener su
-/// proyección al día.
+/// Lo publica **Delivery** con las transiciones del ciclo de entrega:
+/// <c>ConfirmadoEnLocal</c> al validar el QR del local, <c>EnRuta</c> al iniciar la entrega y
+/// <c>Buscando</c> cuando el domiciliario rechaza antes de llegar al local. Orders lo consume
+/// para replicar el estado y no quedarse mostrando el pedido como recién creado; Feedback, para
+/// mantener su proyección al día. Orders **no** lo publica: solo cambia el estado como reacción
+/// a estos eventos, y republicarlo sería devolverse el propio mensaje.
+///
+/// v2 (TASK-308): se agregó <see cref="Motivo"/>, opcional y al final para no romper
+/// mensajes ya encolados. Es lo que permite que el rechazo quede explicado en el historial
+/// del pedido.
 /// </summary>
 public record PedidoActualizado(
     Guid PedidoId,
     string Codigo,
     string EstadoAnterior,
     string EstadoNuevo,
-    DateTime OccurredAt
+    DateTime OccurredAt,
+    string? Motivo = null
 );
 
 /// <summary>

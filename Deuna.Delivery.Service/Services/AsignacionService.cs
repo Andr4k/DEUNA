@@ -25,7 +25,13 @@ public record ResultadoAsignacion(
     bool Asignado,
     string Mensaje,
     Guid? RepartidorId = null,
-    double? DistanciaMetros = null);
+    double? DistanciaMetros = null,
+    /// <summary>
+    /// El rechazo quedó registrado, haya o no a quién reasignar. Sin esta marca, un rechazo
+    /// correcto en el que no hay otro domiciliario disponible se confundía con un rechazo
+    /// inválido.
+    /// </summary>
+    bool RechazoRegistrado = false);
 
 /// <summary>Pedido asignado, tal como lo ve el repartidor en su app.</summary>
 public record PedidoAsignadoDto(
@@ -297,13 +303,32 @@ public class AsignacionService : IAsignacionService
             "Pedido {Codigo} rechazado por {RepartidorId}: vuelve a búsqueda",
             pedido.Codigo, repartidorId);
 
+        // El rechazo es una transición de la máquina de estados (Asignado → Buscando), así que
+        // se publica: sin esto, los demás servicios siguen mostrando el pedido como asignado.
+        await _publishEndpoint.Publish(
+            new PedidoActualizado(
+                PedidoId: pedido.PedidoId,
+                Codigo: pedido.Codigo,
+                EstadoAnterior: PedidoDisponible.EstadoAsignado,
+                EstadoNuevo: PedidoDisponible.EstadoBuscando,
+                OccurredAt: ahora,
+                Motivo: motivo),
+            cancellationToken);
+
         // Reasignación inmediata, excluyendo a quien acaba de rechazar: volver a ofrecérselo
         // sería pedirle que rechace dos veces.
         var reasignacion = await IntentarAsignarAsync(pedidoId, excluirRepartidorId: repartidorId, cancellationToken);
 
         return reasignacion.Asignado
-            ? reasignacion with { Mensaje = $"Rechazo registrado. {reasignacion.Mensaje}" }
-            : new ResultadoAsignacion(false, $"Rechazo registrado. El pedido vuelve a búsqueda: {reasignacion.Mensaje}");
+            ? reasignacion with
+            {
+                Mensaje = $"Rechazo registrado. {reasignacion.Mensaje}",
+                RechazoRegistrado = true
+            }
+            : new ResultadoAsignacion(
+                false,
+                $"Rechazo registrado. El pedido vuelve a búsqueda: {reasignacion.Mensaje}",
+                RechazoRegistrado: true);
     }
 
     public async Task<IReadOnlyList<PedidoAsignadoDto>> ObtenerAsignadosAsync(
@@ -411,6 +436,18 @@ public class AsignacionService : IAsignacionService
         pedido.Estado = PedidoDisponible.EstadoConfirmadoEnLocal;
 
         await _db.SaveChangesAsync(cancellationToken);
+
+        // La llegada al local es una transición de la máquina de estados
+        // (Asignado → ConfirmadoEnLocal): sin publicarla, los demás servicios siguen viendo el
+        // pedido como recién asignado y el hito no queda en su historial.
+        await _publishEndpoint.Publish(
+            new PedidoActualizado(
+                PedidoId: pedido.PedidoId,
+                Codigo: pedido.Codigo,
+                EstadoAnterior: PedidoDisponible.EstadoAsignado,
+                EstadoNuevo: PedidoDisponible.EstadoConfirmadoEnLocal,
+                OccurredAt: ahora),
+            cancellationToken);
 
         _logger.LogInformation(
             "Pedido {Codigo}: llegada confirmada en el local por {RepartidorId}",

@@ -1,5 +1,6 @@
 using Deuna.Orders.Service.Consumers;
 using Deuna.Orders.Service.Models;
+using Deuna.Shared.Domain;
 using Deuna.Shared.Events;
 using FluentAssertions;
 using MassTransit;
@@ -28,14 +29,14 @@ public class PedidoEntregadoConsumerTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private async Task<Pedido> CrearPedidoAsync(string estado = "Pendiente", DateTime? fechaEntrega = null)
+    private async Task<Pedido> CrearPedidoAsync(string? estado = null, DateTime? fechaEntrega = null)
     {
         var pedido = new Pedido
         {
             ClienteId = Guid.NewGuid(),
             RestauranteId = Guid.NewGuid(),
             Codigo = $"PED-{Guid.NewGuid().ToString("N")[..6]}",
-            Estado = estado,
+            Estado = estado ?? EstadosPedido.Buscando,
             Subtotal = 30000m,
             CostoEnvio = 5000m,
             Total = 35000m,
@@ -94,6 +95,35 @@ public class PedidoEntregadoConsumerTests : IDisposable
 
         var guardado = await _db.Pedidos.SingleAsync(p => p.Id == pedido.Id);
         guardado.FechaEntrega.Should().Be(fechaOriginal, "el pedido ya estaba entregado");
+    }
+
+    [Fact]
+    public async Task PedidoEntregado_CierraElIntentoDelDomiciliario()
+    {
+        // El historial queda completo: quién lo llevó y cuándo terminó (TASK-308).
+        var pedido = await CrearPedidoAsync();
+        var repartidorId = Guid.NewGuid();
+        var fechaEntrega = DateTime.UtcNow;
+
+        _db.AsignacionesReplicadas.Add(new AsignacionReplicada
+        {
+            PedidoId = pedido.Id,
+            RepartidorId = repartidorId,
+            FechaAsignacion = fechaEntrega.AddMinutes(-30),
+            EstadoAsignacion = AsignacionReplicada.EstadoEnRuta
+        });
+        await _db.SaveChangesAsync();
+
+        await CrearConsumer().Consume(Contexto(new PedidoEntregado(
+            PedidoId: pedido.Id,
+            Codigo: pedido.Codigo,
+            RepartidorId: repartidorId,
+            FechaEntrega: fechaEntrega,
+            OccurredAt: DateTime.UtcNow)));
+
+        var asignacion = await _db.AsignacionesReplicadas.SingleAsync();
+        asignacion.EstadoAsignacion.Should().Be(AsignacionReplicada.EstadoCompletado);
+        asignacion.FechaEntrega.Should().Be(fechaEntrega);
     }
 
     [Fact]

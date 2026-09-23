@@ -16,6 +16,7 @@ public class OrdersDbContext : DbContext
     public DbSet<RestauranteReplicado> RestaurantesReplicados => Set<RestauranteReplicado>();
     public DbSet<ZonaCoberturaReplicada> ZonasCoberturaReplicadas => Set<ZonaCoberturaReplicada>();
     public DbSet<HorarioAtencionReplicado> HorariosAtencionReplicados => Set<HorarioAtencionReplicado>();
+    public DbSet<AsignacionReplicada> AsignacionesReplicadas => Set<AsignacionReplicada>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -197,6 +198,24 @@ public class OrdersDbContext : DbContext
             entity.Property(e => e.Cerrado).IsRequired();
 
             entity.HasIndex(e => e.RestauranteReplicadoId);
+        });
+
+        // AsignacionReplicada: historial de intentos de entrega de un pedido (1:N)
+        modelBuilder.Entity<AsignacionReplicada>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PedidoId).IsRequired();
+            entity.Property(e => e.RepartidorId).IsRequired();
+            entity.Property(e => e.FechaAsignacion).IsRequired();
+            entity.Property(e => e.EstadoAsignacion).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.MotivoRechazo).HasMaxLength(300);
+
+            // Idempotencia: una reentrega del evento trae el mismo OccurredAt, así que el
+            // intento no se duplica. Un mismo domiciliario sí puede volver a recibir el
+            // pedido más adelante (tras un rechazo y un reintento), y eso es otro intento
+            // con otra hora.
+            entity.HasIndex(e => new { e.PedidoId, e.RepartidorId, e.FechaAsignacion }).IsUnique();
+            entity.HasIndex(e => e.PedidoId);
         });
     }
 }

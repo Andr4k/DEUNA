@@ -4,6 +4,7 @@ using System.Text.Json;
 using Deuna.Orders.Service;
 using Deuna.Orders.Service.DTOs;
 using Deuna.Orders.Service.Models;
+using Deuna.Shared.Domain;
 using Deuna.Shared.Events;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -92,7 +93,7 @@ public class CrearPedidoTests : IClassFixture<TestWebApplicationFactory>
         result!.PedidoId.Should().NotBeEmpty();
         result.Codigo.Should().StartWith("PED-");
         result.TokenQrLocal.Should().NotBeNullOrEmpty().And.HaveLength(32);
-        result.Estado.Should().Be("Pendiente");
+        result.Estado.Should().Be(EstadosPedido.Buscando);
         result.Subtotal.Should().Be(62000m); // 2*25000 + 1*12000
         result.CostoEnvio.Should().BeGreaterThan(0);
         result.Total.Should().Be(result.Subtotal + result.CostoEnvio);
