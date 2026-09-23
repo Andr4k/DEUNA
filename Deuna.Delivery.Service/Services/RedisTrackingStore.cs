@@ -55,6 +55,23 @@ public class RedisTrackingStore : ITrackingStore
             "Telemetría GPS registrada para el repartidor {RiderId} en {Latitud},{Longitud}", riderId, latitud, longitud);
     }
 
+    /// <summary>
+    /// Borra la posición y el timestamp del repartidor. La clave GEO es un sorted set, así
+    /// que se saca el miembro con ZREM en lugar de borrar la clave entera: otros
+    /// repartidores siguen en ella.
+    /// </summary>
+    public async Task EliminarAsync(Guid riderId, CancellationToken cancellationToken = default)
+    {
+        var db = _redis.GetDatabase();
+        var miembro = riderId.ToString();
+
+        await db.SortedSetRemoveAsync(ClaveRepartidores, miembro);
+        await db.HashDeleteAsync(ClaveTimestamps, miembro);
+
+        _logger.LogInformation(
+            "Telemetría GPS del repartidor {RiderId} eliminada tras cerrar la entrega", riderId);
+    }
+
     public async Task<UbicacionGps?> ObtenerAsync(Guid riderId, CancellationToken cancellationToken = default)
     {
         var db = _redis.GetDatabase();

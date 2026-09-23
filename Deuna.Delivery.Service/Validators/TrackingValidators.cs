@@ -42,3 +42,16 @@ public class ValidarQrLocalRequestValidator : AbstractValidator<ValidarQrLocalRe
             .MaximumLength(64).WithMessage("El token del QR es demasiado largo");
     }
 }
+
+public class ValidarQrEntregaRequestValidator : AbstractValidator<ValidarQrEntregaRequest>
+{
+    public ValidarQrEntregaRequestValidator()
+    {
+        RuleFor(x => x.OrderId)
+            .NotEmpty().WithMessage("El pedido es obligatorio");
+
+        RuleFor(x => x.TokenQrEntrega)
+            .NotEmpty().WithMessage("El token del QR es obligatorio")
+            .MaximumLength(64).WithMessage("El token del QR es demasiado largo");
+    }
+}

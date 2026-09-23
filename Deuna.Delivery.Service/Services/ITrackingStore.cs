@@ -30,4 +30,13 @@ public interface ITrackingStore
     /// puede estar ocupado con otra entrega, y entonces corresponde el siguiente.
     /// </summary>
     Task<IReadOnlyList<UbicacionGps>> BuscarCandidatosAsync(double latitud, double longitud, double radioKm, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Borra la telemetría del repartidor.
+    ///
+    /// Se llama al cerrar la entrega (FR-003.10): la última posición conocida deja de ser
+    /// válida cuando el repartidor ya no está en ruta. Sin telemetría no vuelve a entrar en
+    /// el matching hasta que su app reporte de nuevo.
+    /// </summary>
+    Task EliminarAsync(Guid riderId, CancellationToken cancellationToken = default);
 }

@@ -8,6 +8,7 @@ using MassTransit.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 
 namespace Deuna.Delivery.Service.Tests.Consumers;
 
@@ -42,22 +43,20 @@ public class PedidoCreadoConsumerTests
     /// Doble de la asignación: estos tests verifican la proyección del pedido, no el
     /// matching por cercanía (que tiene su propia suite en Assignment/).
     /// </summary>
-    private sealed class AsignacionNula : IAsignacionService
+    /// <summary>
+    /// Doble de la asignación: estos tests verifican la proyección del pedido, no el matching
+    /// ni el ciclo de entrega (cada uno tiene su suite en Assignment/).
+    ///
+    /// Es un mock y no un doble escrito a mano porque cada método nuevo de IAsignacionService
+    /// rompía la compilación de este archivo sin que tuviera nada que ver.
+    /// </summary>
+    private static IAsignacionService AsignacionSinCandidatos()
     {
-        public Task<ResultadoAsignacion> IntentarAsignarAsync(Guid pedidoId, Guid? excluirRepartidorId = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ResultadoAsignacion(false, "sin candidatos (doble de test)"));
-
-        public Task<int> ReintentarPendientesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(0);
-
-        public Task<ResultadoAsignacion> RechazarAsync(Guid pedidoId, Guid repartidorId, string? motivo, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ResultadoAsignacion(false, "no aplica"));
-
-        public Task<IReadOnlyList<PedidoAsignadoDto>> ObtenerAsignadosAsync(Guid repartidorId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<PedidoAsignadoDto>>([]);
-
-        public Task<ResultadoValidacionQr> ValidarQrLocalAsync(Guid pedidoId, Guid repartidorId, string tokenQrLocal, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ResultadoValidacionQr(false, "no aplica (doble de test)", MotivoRechazoQr.PedidoNoEncontrado));
+        var asignacion = new Mock<IAsignacionService>();
+        asignacion
+            .Setup(a => a.IntentarAsignarAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResultadoAsignacion(false, "sin candidatos (doble de test)"));
+        return asignacion.Object;
     }
 
     [Fact]
@@ -66,7 +65,7 @@ public class PedidoCreadoConsumerTests
         // Arrange
         var db = CreateDbContext();
         var harness = new InMemoryTestHarness();
-        harness.Consumer(() => new PedidoCreadoConsumer(db, new AsignacionNula(), NullLogger<PedidoCreadoConsumer>.Instance));
+        harness.Consumer(() => new PedidoCreadoConsumer(db, AsignacionSinCandidatos(), NullLogger<PedidoCreadoConsumer>.Instance));
 
         await harness.Start();
         try
@@ -94,7 +93,7 @@ public class PedidoCreadoConsumerTests
         // Arrange
         var db = CreateDbContext();
         var harness = new InMemoryTestHarness();
-        harness.Consumer(() => new PedidoCreadoConsumer(db, new AsignacionNula(), NullLogger<PedidoCreadoConsumer>.Instance));
+        harness.Consumer(() => new PedidoCreadoConsumer(db, AsignacionSinCandidatos(), NullLogger<PedidoCreadoConsumer>.Instance));
 
         var evento = CreateEvent();
 
@@ -128,7 +127,7 @@ public class PedidoCreadoConsumerTests
         // Arrange
         var db = CreateDbContext();
         var harness = new InMemoryTestHarness();
-        harness.Consumer(() => new PedidoCreadoConsumer(db, new AsignacionNula(), NullLogger<PedidoCreadoConsumer>.Instance));
+        harness.Consumer(() => new PedidoCreadoConsumer(db, AsignacionSinCandidatos(), NullLogger<PedidoCreadoConsumer>.Instance));
 
         var evento = CreateEvent();
 
