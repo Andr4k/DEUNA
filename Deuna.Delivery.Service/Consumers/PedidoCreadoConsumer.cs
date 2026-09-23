@@ -1,4 +1,4 @@
-using Deuna.Delivery.Service.Events;
+using Deuna.Shared.Events;
 using Deuna.Delivery.Service.Models;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
