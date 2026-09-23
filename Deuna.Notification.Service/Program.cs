@@ -19,6 +19,13 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .Enrich.FromLogContext()
     .WriteTo.Console());
 
+// La sobrecarga con delegado configura el logger del host pero NO asigna el logger
+// estático, así que sin esta línea las llamadas Log.X de este archivo no se emiten.
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .WriteTo.Console()
+    .CreateLogger();
+
 Log.Information("Starting Deuna Notification Service");
 
 builder.Services.AddOpenApi();
@@ -78,15 +85,17 @@ builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IPushSender>(sp =>
 {
     var opciones = sp.GetRequiredService<IOptions<FcmOptions>>().Value;
+    // Logger del contenedor, no el estático: es el que sí está enganchado al host.
+    var logger = sp.GetRequiredService<ILogger<IPushSender>>();
 
     if (opciones.EstaConfigurado)
     {
         var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("fcm");
-        Log.Information("Push: proveedor FCM (proyecto {ProjectId})", opciones.ProjectId);
+        logger.LogInformation("Push: proveedor FCM (proyecto {ProjectId})", opciones.ProjectId);
         return new FcmPushSender(http, opciones, sp.GetRequiredService<ILogger<FcmPushSender>>());
     }
 
-    Log.Warning("Push: FCM sin configurar, se usa el emisor de log (no se envían notificaciones reales)");
+    logger.LogWarning("Push: FCM sin configurar, se usa el emisor de log (no se envían notificaciones reales)");
     return new LogPushSender(sp.GetRequiredService<ILogger<LogPushSender>>());
 });
 
