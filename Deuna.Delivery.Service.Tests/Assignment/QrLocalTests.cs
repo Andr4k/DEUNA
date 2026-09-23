@@ -1,5 +1,6 @@
 using Deuna.Delivery.Service.Models;
 using Deuna.Delivery.Service.Services;
+using Deuna.Shared.Events;
 using FluentAssertions;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,7 @@ public class QrLocalTests : IDisposable
     private const string TokenEntrega = "ffffffffffffffffffffffffffffffff";
 
     private readonly DeliveryDbContext _db;
+    private readonly Mock<IPublishEndpoint> _publish = new();
 
     public QrLocalTests()
     {
@@ -39,7 +41,7 @@ public class QrLocalTests : IDisposable
         new AsignacionService(
             _db,
             new TrackingStoreNulo(),
-            new Mock<IPublishEndpoint>().Object,
+            _publish.Object,
             Options.Create(new AsignacionOptions()),
             NullLogger<AsignacionService>.Instance);
 
@@ -108,6 +110,35 @@ public class QrLocalTests : IDisposable
             pedido.PedidoId, RepartidorId, $"  {TokenLocal}\n");
 
         resultado.Valido.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ValidarElQrLocal_PublicaLaTransicionDeEstado()
+    {
+        // La llegada al local es una transición de la máquina de estados: si no se publica,
+        // los demás servicios siguen viendo el pedido como recién asignado (TASK-308).
+        var pedido = await CrearPedidoAsignadoAsync(RepartidorId);
+
+        await CrearServicio().ValidarQrLocalAsync(pedido.PedidoId, RepartidorId, TokenLocal);
+
+        _publish.Verify(p => p.Publish(
+            It.Is<PedidoActualizado>(e =>
+                e.PedidoId == pedido.PedidoId &&
+                e.EstadoAnterior == PedidoDisponible.EstadoAsignado &&
+                e.EstadoNuevo == PedidoDisponible.EstadoConfirmadoEnLocal),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UnTokenQueNoCorresponde_NoPublicaNada()
+    {
+        var pedido = await CrearPedidoAsignadoAsync(RepartidorId);
+
+        await CrearServicio().ValidarQrLocalAsync(pedido.PedidoId, RepartidorId, new string('0', 32));
+
+        _publish.Verify(
+            p => p.Publish(It.IsAny<PedidoActualizado>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     // ------------------------------------------------------------------- rechazos
