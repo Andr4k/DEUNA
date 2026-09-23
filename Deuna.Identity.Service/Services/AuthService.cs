@@ -207,6 +207,29 @@ public class AuthService : IAuthService
 
         await _db.SaveChangesAsync();
 
+        // Token de verificación de email: se PERSISTE. Antes se generaba al construir la
+        // respuesta y se descartaba, así que verify-email nunca podía validarlo. Es el
+        // mismo defecto que tenía el alta de restaurantes.
+        var verificationToken = GenerateSecureToken();
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            UsuarioId = user.Id,
+            Token = verificationToken,
+            ExpiresAt = DateTime.UtcNow.AddHours(24),
+            CreatedByIp = "register"
+        });
+        await _db.SaveChangesAsync();
+
+        // Replicación por eventos: Delivery necesita conocer a los repartidores para poder
+        // asignarles pedidos por cercanía, y Feedback para poder calificarlos (ADR-005).
+        await _publishEndpoint.Publish(new RepartidorRegistrado(
+            RepartidorId: user.Id,
+            NombreCompleto: request.NombreCompleto,
+            DocumentoIdentidad: request.DocumentoIdentidad,
+            CiudadOperacion: request.CiudadOperacion,
+            FotoPerfilUrl: request.FotoPerfilUrl,
+            OccurredAt: DateTime.UtcNow));
+
         _logger.LogInformation("Repartidor registrado: {Email}", request.Email);
 
         return new AuthResponse(true, "Registro exitoso. Verifique su email.", new
@@ -214,7 +237,7 @@ public class AuthService : IAuthService
             UserId = user.Id,
             Email = user.Email,
             Role = Roles.Rider,
-            VerificationToken = GenerateSecureToken()
+            VerificationToken = verificationToken
         });
     }
 

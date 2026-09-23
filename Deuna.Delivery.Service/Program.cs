@@ -56,7 +56,7 @@ if (redisConfiguration is not null)
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<PedidoCreadoConsumer>();
-
+    x.AddConsumer<RepartidorRegistradoConsumer>();
     if (useInMemory)
     {
         x.UsingInMemory((context, cfg) =>
