@@ -285,6 +285,38 @@ services:
       - deuna-network
     restart: unless-stopped
 
+  # Servicio de métricas: no tiene base propia. Lee las cuatro bases de los otros
+  # servicios, una por dominio, con SQL de solo lectura.
+  metrics:
+    build:
+      context: .
+      dockerfile: Deuna.Metrics.Service/Dockerfile
+    container_name: deuna-metrics
+    ports:
+      - "5006:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:8080"
+      # Una cadena de conexión por dominio. Cada subservicio recibe solo la suya.
+      ConnectionStrings__Pedidos: "Host=postgres-orders;Port=5432;Database=deuna_orders;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      ConnectionStrings__Domiciliarios: "Host=postgres-delivery;Port=5432;Database=deuna_delivery;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      ConnectionStrings__Feedback: "Host=postgres-feedback;Port=5432;Database=deuna_feedback;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      ConnectionStrings__Restaurantes: "Host=postgres-identity;Port=5432;Database=deuna_identity;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      Metricas__ZonaHoraria: "America/Bogota"
+      Metricas__MinutosParaConsiderarATiempo: "40"
+    depends_on:
+      postgres-orders:
+        condition: service_healthy
+      postgres-delivery:
+        condition: service_healthy
+      postgres-feedback:
+        condition: service_healthy
+      postgres-identity:
+        condition: service_healthy
+    networks:
+      - deuna-network
+    restart: unless-stopped
+
 volumes:
   postgres-identity-data:
     driver: local
