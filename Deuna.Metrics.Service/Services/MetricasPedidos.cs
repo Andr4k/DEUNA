@@ -87,7 +87,7 @@ public sealed class MetricasPedidos(FuenteDatos datosPedidos, IOptions<MetricasO
         CancellationToken cancelacion)
     {
         const string sql = """
-            select "Estado" as Estado, count(*) as Valor
+            select "Estado" as Estado, count(*)::int as Valor
             from pedidos
             where "FechaCreacion" >= @Desde and "FechaCreacion" < @Hasta
             group by "Estado"
@@ -112,9 +112,9 @@ public sealed class MetricasPedidos(FuenteDatos datosPedidos, IOptions<MetricasO
             select
                 initcap(trim(translate(lower(coalesce(nullif(trim(d."Ciudad"), ''), 'Sin ciudad')),
                                         'áéíóúüñàèìòùâêîôû', 'aeiouunaeiouaeiou'))) as Nombre,
-                count(*)                                                              as Pedidos,
-                count(*) filter (where p."Estado" = @Entregado)                       as Entregados,
-                count(*) filter (where p."Estado" = any(@EnProgreso))                 as Pendientes,
+                count(*)::int                                                         as Pedidos,
+                count(*) filter (where p."Estado" = @Entregado)::int                  as Entregados,
+                count(*) filter (where p."Estado" = any(@EnProgreso))::int            as Pendientes,
                 coalesce(sum(t."TotalCalculado"), 0)                                  as Recaudo
             from pedidos p
             left join direcciones_entrega d on d."Id" = p."DireccionEntregaId"
@@ -141,7 +141,7 @@ public sealed class MetricasPedidos(FuenteDatos datosPedidos, IOptions<MetricasO
     public async Task<int> RestaurantesConPedidosAsync(RangoTiempo rango, CancellationToken cancelacion)
     {
         const string sql = """
-            select count(distinct "RestauranteId")
+            select count(distinct "RestauranteId")::int
             from pedidos
             where "FechaCreacion" >= @Desde and "FechaCreacion" < @Hasta
             """;

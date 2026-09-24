@@ -158,6 +158,7 @@ services:
       ReverseProxy__Clusters__orders-cluster__Destinations__orders-service__Address: "http://orders:8080"
       ReverseProxy__Clusters__delivery-cluster__Destinations__delivery-service__Address: "http://delivery:8080"
       ReverseProxy__Clusters__feedback-cluster__Destinations__feedback-service__Address: "http://feedback:8080"
+      ReverseProxy__Clusters__metrics-cluster__Destinations__metrics-service__Address: "http://metrics:8080"
     depends_on:
       postgres-identity:
         condition: service_healthy
@@ -304,6 +305,11 @@ services:
       ConnectionStrings__Restaurantes: "Host=postgres-identity;Port=5432;Database=deuna_identity;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
       Metricas__ZonaHoraria: "America/Bogota"
       Metricas__MinutosParaConsiderarATiempo: "40"
+      # Identity firma con su propio emisor y audiencia: sin esto el servicio
+      # valida la firma con otros valores y devuelve 401 con un token válido.
+      Jwt__SecretKey: "DeunaSuperSecretKey2026!@#$%^&*()_+-=[]{}|;:,.<>?"
+      Jwt__Issuer: "Deuna.Identity"
+      Jwt__Audience: "Deuna.Api"
     depends_on:
       postgres-orders:
         condition: service_healthy

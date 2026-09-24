@@ -22,9 +22,9 @@ public sealed class MetricasRestaurantes(FuenteDatos datosRestaurantes) : IMetri
     {
         const string sql = """
             select
-                count(*) filter (where "Activo")                    as Activos,
+                count(*) filter (where "Activo")::int                    as Activos,
                 count(*) filter (where "CreatedAt" >= @Desde
-                                   and "CreatedAt" < @Hasta)        as NuevosHoy
+                                   and "CreatedAt" < @Hasta)::int        as NuevosHoy
             from perfiles_restaurante
             """;
 

@@ -45,10 +45,10 @@ public sealed class MetricasDomiciliarios(
                   and "Estado" not in ('Completado', 'Rechazado')
             )
             select
-                count(*) filter (where r."Activo")                                   as Activos,
-                count(*) filter (where r."Activo" and a."RepartidorId" is null)      as Disponibles,
-                count(*) filter (where r."Activo" and a."RepartidorId" is not null)  as EnServicio,
-                count(*) filter (where not r."Activo")                               as EnDescanso
+                count(*) filter (where r."Activo")::int                                   as Activos,
+                count(*) filter (where r."Activo" and a."RepartidorId" is null)::int      as Disponibles,
+                count(*) filter (where r."Activo" and a."RepartidorId" is not null)::int  as EnServicio,
+                count(*) filter (where not r."Activo")::int                               as EnDescanso
             from repartidores_replicados r
             left join abiertas a on a."RepartidorId" = r."Id"
             """;

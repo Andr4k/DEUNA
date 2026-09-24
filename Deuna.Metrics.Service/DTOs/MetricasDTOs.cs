@@ -6,6 +6,12 @@ namespace Deuna.Metrics.Service.DTOs;
 /// Los nombres coinciden con los tipos que ya usa el portal
 /// (`src/lib/tipos/metricas.ts`): son el acuerdo entre los dos lados, y un cambio
 /// acá obliga a cambiar allá.
+///
+/// **Los `count(*)` de las consultas van con `::int` a propósito.** PostgreSQL
+/// devuelve `bigint` (`Int64`) en un `count(*)`, y Dapper exige que el constructor
+/// de un record coincida EXACTAMENTE con los tipos de las columnas: con `int` acá
+/// y `bigint` allá, no materializa y la petición termina en 500. No lo avisa el
+/// compilador, así que el cast no se quita.
 /// </summary>
 public record IndicadoresDelDia(
     int PedidosTotales,
