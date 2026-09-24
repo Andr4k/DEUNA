@@ -48,6 +48,8 @@ builder.Services.AddMassTransit(x =>
     // Evento terminal: es el que habilita la encuesta (TASK-305).
     x.AddConsumer<PedidoEntregadoConsumer>();
     x.AddConsumer<RepartidorRegistradoConsumer>();
+    // Réplica de restaurantes: el mensaje viral nombra al restaurante (TASK-402).
+    x.AddConsumer<RestauranteRegistradoConsumer>();
 
     if (useInMemory)
     {
@@ -70,6 +72,9 @@ builder.Services.AddMassTransit(x =>
 
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
+
+// El enlace que se comparte apunta al dominio real de cada ambiente.
+builder.Services.Configure<FeedbackOptions>(builder.Configuration.GetSection(FeedbackOptions.SectionName));
 
 ConfigureHealthChecks(builder.Services, builder.Configuration, useInMemory);
 
