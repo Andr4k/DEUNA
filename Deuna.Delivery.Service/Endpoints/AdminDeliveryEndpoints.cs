@@ -92,6 +92,21 @@ public static class AdminDeliveryEndpoints
         .Produces(StatusCodes.Status403Forbidden)
         .Produces(StatusCodes.Status404NotFound);
 
+        // GET /api/v1/admin/delivery/mapa — las tres capas del mapa de la operación
+        grupo.MapGet("/mapa", async (
+            IMapaService mapa,
+            CancellationToken cancellationToken) =>
+        {
+            var operacion = await mapa.ObtenerAsync(cancellationToken);
+
+            return Results.Ok(operacion);
+        })
+        .WithName("ObtenerMapaOperacion")
+        .WithSummary("Devuelve el mapa de la operación: domiciliarios en vivo, pedidos activos y restaurantes")
+        .Produces<MapaOperacion>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden);
+
         return app;
     }
 

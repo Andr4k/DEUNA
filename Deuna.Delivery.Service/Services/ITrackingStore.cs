@@ -32,6 +32,15 @@ public interface ITrackingStore
     Task<IReadOnlyList<UbicacionGps>> BuscarCandidatosAsync(double latitud, double longitud, double radioKm, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Todas las posiciones conocidas, sin centro ni radio.
+    ///
+    /// El mapa de la operación necesita la flota completa: con un centro y un radio
+    /// arbitrarios, un domiciliario fuera del círculo desaparecería del mapa sin que
+    /// nadie lo note.
+    /// </summary>
+    Task<IReadOnlyList<UbicacionGps>> ObtenerTodasAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Borra la telemetría del repartidor.
     ///
     /// Se llama al cerrar la entrega (FR-003.10): la última posición conocida deja de ser
