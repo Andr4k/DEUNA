@@ -43,6 +43,18 @@ public class ValidarQrLocalRequestValidator : AbstractValidator<ValidarQrLocalRe
     }
 }
 
+public class AsignarPedidoRequestValidator : AbstractValidator<AsignarPedidoRequest>
+{
+    public AsignarPedidoRequestValidator()
+    {
+        // Solo que venga un repartidor. Que ese repartidor sirva para ese pedido no se
+        // valida acá: depende del radio y de si está libre, y eso lo sabe el servicio, no
+        // el formulario.
+        RuleFor(x => x.RepartidorId)
+            .NotEmpty().WithMessage("El repartidor es obligatorio");
+    }
+}
+
 public class ValidarQrEntregaRequestValidator : AbstractValidator<ValidarQrEntregaRequest>
 {
     public ValidarQrEntregaRequestValidator()

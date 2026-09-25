@@ -142,6 +142,9 @@ app.MapTrackingEndpoints();
 // Asignación automática (TASK-303)
 app.MapAssignmentEndpoints();
 
+// Panel del administrador: asignación manual (grupo propio con política "admin")
+app.MapAdminDeliveryEndpoints();
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<DeliveryDbContext>();

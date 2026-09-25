@@ -49,3 +49,11 @@ public record ValidarQrEntregaRequest(
     [Required] Guid OrderId,
     [Required, MaxLength(64)] string TokenQrEntrega
 );
+
+/// <summary>
+/// Asignación manual desde el panel de administración. El pedido va en la ruta: acá solo
+/// viaja a quién se le asigna.
+/// </summary>
+public record AsignarPedidoRequest(
+    [Required] Guid RepartidorId
+);
