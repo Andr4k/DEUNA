@@ -126,3 +126,27 @@ public record PedidoAsignado(
     Guid RepartidorId,
     DateTime OccurredAt
 );
+
+/// <summary>
+/// Publicado por Feedback cuando se registra la calificación de un pedido entregado
+/// (Nivel 1, US-004.1). Contrato v1.
+///
+/// Consumido por Orders para replicar las dos calificaciones que muestra el historial de
+/// servicios finalizados: la del domiciliario y la del restaurante. Feedback tiene la
+/// encuesta y Orders la pantalla, y ninguno le pide datos al otro en una lectura: el dato
+/// viaja por evento, como el resto de las réplicas.
+///
+/// Los dos sujetos van nombrados y no son intercambiables: en la encuesta el restaurante
+/// se califica en <c>RatingGeneralComida</c> y el domiciliario en
+/// <c>RatingServicioRepartidor</c>. Guardarlos cruzados es peor que dejarlos en null.
+/// </summary>
+public record CalificacionRegistrada(
+    Guid PedidoId,
+    string Codigo,
+    // Puede faltar: la encuesta no exige que la asignación haya sido proyectada, y el
+    // cliente califica el servicio aunque no se sepa quién lo entregó.
+    Guid? RepartidorId,
+    int CalificacionRestaurante,
+    int CalificacionDomiciliario,
+    DateTime OccurredAt
+);
