@@ -54,6 +54,39 @@ public enum MotivoAsignacion
     RepartidorOcupado
 }
 
+/// <summary>
+/// Un repartidor que podría recibir el pedido, con lo que el operador necesita para elegir.
+///
+/// No trae "libera en": eso sería una estimación sin dato detrás. Trae <see cref="OcupadoDesde"/>,
+/// que es un hecho, y el operador decide con eso. Tampoco trae una calificación del
+/// repartidor: existe, pero vive en Feedback, no en Delivery.
+/// </summary>
+public record CandidatoAsignable(
+    Guid RepartidorId,
+    string? NombreCompleto,
+    string? CiudadOperacion,
+    double? DistanciaMetros,
+    bool Disponible,
+    string? ServicioActualCodigo,
+    string? ServicioActualEstado,
+    DateTime? OcupadoDesde);
+
+/// <summary>
+/// El resultado de pedirle a Delivery los candidatos de un pedido.
+///
+/// Reusa <see cref="MotivoAsignacion"/>: si el pedido no se puede asignar, esta lista no
+/// tiene sentido, y la pantalla tiene que poder decir por qué en vez de mostrar una tabla
+/// vacía que parece un problema de red.
+/// </summary>
+public record ResultadoCandidatos(
+    bool Exito,
+    string Mensaje,
+    MotivoAsignacion Motivo = MotivoAsignacion.Ninguno,
+    Guid? PedidoId = null,
+    string? Codigo = null,
+    double? RadioKm = null,
+    IReadOnlyList<CandidatoAsignable>? Candidatos = null);
+
 public record ResultadoAsignacion(
     bool Asignado,
     string Mensaje,
@@ -153,6 +186,9 @@ public interface IAsignacionService
     /// se respeta en tanto y en cuanto sea un candidato válido.
     /// </summary>
     Task<ResultadoAsignacion> AsignarManualmenteAsync(Guid pedidoId, Guid repartidorId, CancellationToken cancellationToken = default);
+
+    /// <summary>Lista los repartidores dentro del radio del pedido, con su disponibilidad.</summary>
+    Task<ResultadoCandidatos> ObtenerCandidatosAsync(Guid pedidoId, CancellationToken cancellationToken = default);
 
     /// <summary>Reintenta asignar todos los pedidos que quedaron en búsqueda.</summary>
     Task<int> ReintentarPendientesAsync(CancellationToken cancellationToken = default);
@@ -367,6 +403,68 @@ public class AsignacionService : IAsignacionService
         }
 
         return (pedido, null);
+    }
+
+    public async Task<ResultadoCandidatos> ObtenerCandidatosAsync(
+        Guid pedidoId,
+        CancellationToken cancellationToken = default)
+    {
+        var (pedido, error) = await PedidoAsignableAsync(pedidoId, cancellationToken);
+        if (pedido is null)
+        {
+            return new ResultadoCandidatos(false, error!.Mensaje, error.Motivo);
+        }
+
+        // La misma lista que usa la asignación: el radio se valida en Redis, así que lo que
+        // el operador ve es exactamente el conjunto entre el que el sistema va a aceptar.
+        var candidatos = await _trackingStore.BuscarCandidatosAsync(
+            pedido.Latitud!.Value, pedido.Longitud!.Value, _options.RadioKm, cancellationToken);
+
+        var ocupados = await RepartidoresOcupadosAsync(cancellationToken);
+
+        var ids = candidatos.Select(c => c.RiderId).ToList();
+
+        // Dos consultas para toda la lista, no una por candidato: con un radio grande, una
+        // consulta por fila convierte una pantalla en decenas de viajes a la base.
+        var perfiles = await _db.RepartidoresReplicados
+            .Where(r => ids.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id, cancellationToken);
+
+        var serviciosActivos = await _db.PedidosDisponibles
+            .Where(p => p.RepartidorId != null
+                && ids.Contains(p.RepartidorId.Value)
+                && PedidoDisponible.EstadosQueOcupanAlRepartidor.Contains(p.Estado))
+            .ToListAsync(cancellationToken);
+
+        var lista = candidatos
+            .Select(c =>
+            {
+                var perfil = perfiles.GetValueOrDefault(c.RiderId);
+                var servicio = serviciosActivos.FirstOrDefault(p => p.RepartidorId == c.RiderId);
+
+                return new CandidatoAsignable(
+                    RepartidorId: c.RiderId,
+                    NombreCompleto: perfil?.NombreCompleto,
+                    CiudadOperacion: perfil?.CiudadOperacion,
+                    DistanciaMetros: c.DistanciaMetros,
+                    Disponible: !ocupados.Contains(c.RiderId),
+                    ServicioActualCodigo: servicio?.Codigo,
+                    ServicioActualEstado: servicio?.Estado,
+                    OcupadoDesde: servicio?.AsignadoAt);
+            })
+            .ToList();
+
+        _logger.LogInformation(
+            "Pedido {Codigo}: {Candidatos} candidatos en {RadioKm} km, {Libres} libres",
+            pedido.Codigo, lista.Count, _options.RadioKm, lista.Count(c => c.Disponible));
+
+        return new ResultadoCandidatos(
+            true,
+            $"{lista.Count} repartidor(es) con telemetría en {_options.RadioKm} km",
+            PedidoId: pedido.PedidoId,
+            Codigo: pedido.Codigo,
+            RadioKm: _options.RadioKm,
+            Candidatos: lista);
     }
 
     public async Task<int> ReintentarPendientesAsync(CancellationToken cancellationToken = default)
