@@ -193,10 +193,13 @@ servicio actual de ese repartidor.
 3. `dotnet build` de la solución entera, no solo del proyecto tocado.
 4. **Con datos reales**: pedidos sembrados vía API contra la base, y el endpoint
    consultado con token ADMIN y sin token (401) — igual que se verificó Metrics.
-5. Si toca el gateway o el compose, la variable de entorno correspondiente en el
-   compose: los destinos reales viven ahí, no en `appsettings.json`. ⚠️ B2 y B3 agregan
-   rutas en Delivery, así que el gateway ya las enruta (`/api/v1/delivery/*`) pero
-   conviene confirmarlo con una llamada real de punta a punta.
+5. **El gateway enruta por prefijo, y un prefijo nuevo no existe hasta que se agrega.**
+   `/api/v1/admin/orders/{**catch-all}` era 404 por el gateway mientras el servicio ya
+   respondía 401 — el endpoint andaba y el camino del portal no. Cada rebanada que
+   estrene prefijo necesita su ruta en `Deuna.Gateway/appsettings.json` (apuntando al
+   cluster que ya existe, así que no hace falta variable nueva en el compose) **y el
+   gateway reconstruido**: la configuración va dentro de la imagen, no montada.
+   B2 y B3 van a necesitar `/api/v1/admin/delivery/{**catch-all}`.
 6. MR en GitHub, commits por unidad de trabajo, y checkpoint nuevo en Obsidian.
 
 ---
