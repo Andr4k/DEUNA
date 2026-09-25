@@ -49,19 +49,9 @@ public static class AdminDeliveryEndpoints
                 });
             }
 
-            // El código HTTP sale del MOTIVO, no del texto del mensaje. Un pedido que ya no
-            // está en búsqueda y un repartidor que no es candidato le piden al operador cosas
-            // distintas, y el portal tiene que poder distinguirlas sin interpretar un texto:
-            // el día que alguien corrija una coma, el comportamiento no puede cambiar.
-            var cuerpo = new { message = resultado.Mensaje, motivo = resultado.Motivo.ToString() };
-
-            return resultado.Motivo switch
-            {
-                MotivoAsignacion.PedidoNoEncontrado => Results.NotFound(cuerpo),
-                MotivoAsignacion.EstadoInvalido or MotivoAsignacion.SinPuntoEntrega =>
-                    Results.BadRequest(cuerpo),
-                _ => Results.Conflict(cuerpo)
-            };
+            // El código HTTP sale del MOTIVO, no del texto del mensaje: el día que alguien
+            // corrija una coma, el comportamiento no puede cambiar.
+            return RespuestaDelMotivo(resultado.Mensaje, resultado.Motivo);
         })
         .WithName("AsignarPedidoManualmente")
         .WithSummary("Asigna a mano un pedido al repartidor elegido: tiene que estar en el radio y libre")
@@ -72,6 +62,54 @@ public static class AdminDeliveryEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status409Conflict);
 
+        // GET /api/v1/admin/delivery/candidatos/{pedidoId} — a quién le puede caer el pedido
+        grupo.MapGet("/candidatos/{pedidoId:guid}", async (
+            Guid pedidoId,
+            IAsignacionService asignacion,
+            CancellationToken cancellationToken) =>
+        {
+            var resultado = await asignacion.ObtenerCandidatosAsync(pedidoId, cancellationToken);
+
+            if (!resultado.Exito)
+            {
+                return RespuestaDelMotivo(resultado.Mensaje, resultado.Motivo);
+            }
+
+            return Results.Ok(new
+            {
+                pedidoId = resultado.PedidoId,
+                codigo = resultado.Codigo,
+                radioKm = resultado.RadioKm,
+                total = resultado.Candidatos!.Count,
+                candidatos = resultado.Candidatos
+            });
+        })
+        .WithName("ObtenerCandidatosDelPedido")
+        .WithSummary("Lista los repartidores dentro del radio del pedido, con su disponibilidad")
+        .Produces(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound);
+
         return app;
+    }
+
+    /// <summary>
+    /// Traduce el motivo a un código HTTP. Vive en un solo lugar porque las dos rutas del
+    /// grupo tienen que responder lo mismo para el mismo motivo: si cada una lo decidiera
+    /// por su cuenta, un día el portal recibiría 400 de una y 409 de la otra.
+    /// </summary>
+    private static IResult RespuestaDelMotivo(string mensaje, MotivoAsignacion motivo)
+    {
+        var cuerpo = new { message = mensaje, motivo = motivo.ToString() };
+
+        return motivo switch
+        {
+            MotivoAsignacion.PedidoNoEncontrado => Results.NotFound(cuerpo),
+            MotivoAsignacion.EstadoInvalido or MotivoAsignacion.SinPuntoEntrega =>
+                Results.BadRequest(cuerpo),
+            _ => Results.Conflict(cuerpo)
+        };
     }
 }
