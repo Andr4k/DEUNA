@@ -156,3 +156,38 @@ public record AyerDelResumen(
     // null si ayer no se puede calcular: la variación se muestra como "sin dato",
     // no como -100%.
     int? TiempoPromedioMin);
+
+/// <summary>
+/// La respuesta del endpoint: el sobre de la página y los KPIs de la cabecera.
+///
+/// No es un contrato nuevo de datos: compone los dos que ya existen —el sobre y el
+/// resumen— sin cambiarles un campo. Viajan juntos porque salen del mismo conjunto: son la
+/// misma consulta, no dos que puedan discrepar.
+/// </summary>
+public record RespuestaServiciosFinalizados(
+    PaginaServiciosFinalizados Pagina,
+    ResumenServiciosFinalizados Resumen);
+
+/// <summary>
+/// Los filtros del historial, tal como llegan por query string. No es parte del contrato de
+/// la respuesta: es la forma de la petición.
+///
+/// Son los filtros que la consulta honra. <c>conIncidencia</c> y <c>pago</c> viajan en la
+/// ruta pero no acá: todavía no tienen fuente —no existe el modelo de incidencias y "quién
+/// paga" sigue sin decidirse—, así que la petición que los pide se rechaza en vez de
+/// devolver un conjunto vacío que se leería como un resultado.
+///
+/// Todos son opcionales. Sin <c>Desde</c> la ventana arranca hoy a las 00:00 UTC y dura un
+/// día, que es lo que hace que <c>CompletadosHoy</c> sea literalmente hoy. <c>Hasta</c> es
+/// exclusivo.
+/// </summary>
+public record FiltroServiciosFinalizados(
+    DateTime? Desde,
+    DateTime? Hasta,
+    Guid? RestauranteId,
+    Guid? RepartidorId,
+    string? Zona,
+    double? CalificacionMin,
+    string? Buscar,
+    int Pagina,
+    int Tamano);
