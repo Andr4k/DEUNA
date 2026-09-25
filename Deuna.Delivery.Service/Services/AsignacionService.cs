@@ -21,6 +21,39 @@ public class AsignacionOptions
     public int IntervaloReintentoSegundos { get; set; } = 30;
 }
 
+/// <summary>
+/// Por qué una asignación no se pudo hacer.
+///
+/// Existe porque el panel de administración tiene que responder distinto según el caso:
+/// un pedido que ya no está en búsqueda es un 400, y un repartidor que no es candidato es
+/// un 409. Deducirlo del texto del mensaje sería frágil: el día que alguien corrija una
+/// coma, el código HTTP cambia sin que nadie lo note. Sigue la misma idea que
+/// <see cref="MotivoRechazo"/> en las validaciones de QR.
+/// </summary>
+public enum MotivoAsignacion
+{
+    /// <summary>Se asignó, o el motivo no aplica.</summary>
+    Ninguno,
+
+    /// <summary>El pedido no está proyectado en Delivery.</summary>
+    PedidoNoEncontrado,
+
+    /// <summary>El pedido ya no está en búsqueda: tiene repartidor o cambió de estado.</summary>
+    EstadoInvalido,
+
+    /// <summary>El pedido no tiene punto de entrega, así que no hay cercanía que calcular.</summary>
+    SinPuntoEntrega,
+
+    /// <summary>No hay repartidores con telemetría vigente dentro del radio.</summary>
+    SinCandidatos,
+
+    /// <summary>El repartidor elegido está fuera del radio o no tiene telemetría.</summary>
+    RepartidorNoEsCandidato,
+
+    /// <summary>El repartidor elegido está en el radio pero ya tiene una entrega activa.</summary>
+    RepartidorOcupado
+}
+
 public record ResultadoAsignacion(
     bool Asignado,
     string Mensaje,
@@ -31,7 +64,12 @@ public record ResultadoAsignacion(
     /// correcto en el que no hay otro domiciliario disponible se confundía con un rechazo
     /// inválido.
     /// </summary>
-    bool RechazoRegistrado = false);
+    bool RechazoRegistrado = false,
+    /// <summary>
+    /// Por qué no se asignó. Tipado para que el panel decida el código HTTP sin leer el
+    /// texto del mensaje.
+    /// </summary>
+    MotivoAsignacion Motivo = MotivoAsignacion.Ninguno);
 
 /// <summary>Pedido asignado, tal como lo ve el repartidor en su app.</summary>
 public record PedidoAsignadoDto(
@@ -106,6 +144,16 @@ public interface IAsignacionService
     /// <summary>Intenta asignar un pedido. Si no hay candidatos, lo deja en búsqueda.</summary>
     Task<ResultadoAsignacion> IntentarAsignarAsync(Guid pedidoId, Guid? excluirRepartidorId = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Asigna un pedido al repartidor que elige un administrador desde el panel.
+    ///
+    /// No salta ninguna regla: el elegido tiene que estar dentro del radio del pedido y
+    /// libre, igual que en la asignación automática. La diferencia es que acá el sistema no
+    /// elige — el operador puede saber algo que el algoritmo no ve —, así que la elección
+    /// se respeta en tanto y en cuanto sea un candidato válido.
+    /// </summary>
+    Task<ResultadoAsignacion> AsignarManualmenteAsync(Guid pedidoId, Guid repartidorId, CancellationToken cancellationToken = default);
+
     /// <summary>Reintenta asignar todos los pedidos que quedaron en búsqueda.</summary>
     Task<int> ReintentarPendientesAsync(CancellationToken cancellationToken = default);
 
@@ -174,27 +222,14 @@ public class AsignacionService : IAsignacionService
         Guid? excluirRepartidorId = null,
         CancellationToken cancellationToken = default)
     {
-        var pedido = await _db.PedidosDisponibles
-            .FirstOrDefaultAsync(p => p.PedidoId == pedidoId, cancellationToken);
-
+        var (pedido, error) = await PedidoAsignableAsync(pedidoId, cancellationToken);
         if (pedido is null)
         {
-            return new ResultadoAsignacion(false, $"El pedido {pedidoId} no está proyectado en Delivery");
-        }
-
-        // Un pedido tiene un solo domiciliario activo: solo se asigna si sigue en búsqueda.
-        if (pedido.Estado != PedidoDisponible.EstadoBuscando || pedido.RepartidorId is not null)
-        {
-            return new ResultadoAsignacion(false, $"El pedido {pedido.Codigo} no está en búsqueda (estado {pedido.Estado})");
-        }
-
-        if (pedido.Latitud is null || pedido.Longitud is null)
-        {
-            return new ResultadoAsignacion(false, $"El pedido {pedido.Codigo} no tiene punto de entrega: no se puede calcular cercanía");
+            return error!;
         }
 
         var candidatos = await _trackingStore.BuscarCandidatosAsync(
-            pedido.Latitud.Value, pedido.Longitud.Value, _options.RadioKm, cancellationToken);
+            pedido.Latitud!.Value, pedido.Longitud!.Value, _options.RadioKm, cancellationToken);
 
         if (candidatos.Count == 0)
         {
@@ -202,7 +237,10 @@ public class AsignacionService : IAsignacionService
                 "Pedido {Codigo} sin repartidores con telemetría en {RadioKm} km: queda en búsqueda",
                 pedido.Codigo, _options.RadioKm);
 
-            return new ResultadoAsignacion(false, $"No hay repartidores con telemetría vigente en {_options.RadioKm} km");
+            return new ResultadoAsignacion(
+                false,
+                $"No hay repartidores con telemetría vigente en {_options.RadioKm} km",
+                Motivo: MotivoAsignacion.SinCandidatos);
         }
 
         var ocupados = await RepartidoresOcupadosAsync(cancellationToken);
@@ -220,13 +258,115 @@ public class AsignacionService : IAsignacionService
             return new ResultadoAsignacion(false, "No hay repartidores disponibles en el radio: todos tienen una entrega activa");
         }
 
-        await AsignarAsync(pedido, elegido, cancellationToken);
+        await AsignarAsync(pedido, elegido, "automáticamente", cancellationToken);
 
         return new ResultadoAsignacion(
             true,
             $"Pedido {pedido.Codigo} asignado al repartidor más cercano",
             elegido.RiderId,
             elegido.DistanciaMetros);
+    }
+
+    public async Task<ResultadoAsignacion> AsignarManualmenteAsync(
+        Guid pedidoId,
+        Guid repartidorId,
+        CancellationToken cancellationToken = default)
+    {
+        var (pedido, error) = await PedidoAsignableAsync(pedidoId, cancellationToken);
+        if (pedido is null)
+        {
+            return error!;
+        }
+
+        // La lista sale del mismo lugar que en la asignación automática: el radio se valida
+        // en Redis, así que un repartidor fuera del radio o sin telemetría no aparece acá.
+        var candidatos = await _trackingStore.BuscarCandidatosAsync(
+            pedido.Latitud!.Value, pedido.Longitud!.Value, _options.RadioKm, cancellationToken);
+
+        // Estar en el radio no alcanza: el elegido también tiene que estar libre. Un
+        // repartidor con una entrega activa está en el radio igual, así que la lista de
+        // candidatos por sí sola lo incluiría. Es la misma condición que usa la asignación
+        // automática para descartar a los ocupados.
+        var ocupados = await RepartidoresOcupadosAsync(cancellationToken);
+        var elegido = candidatos.FirstOrDefault(c =>
+            c.RiderId == repartidorId && !ocupados.Contains(c.RiderId));
+
+        if (elegido is null)
+        {
+            // Estar fuera del radio y estar ocupado son dos cosas distintas, y el operador
+            // decide distinto en cada caso. Por eso el motivo se distingue, en lugar de
+            // devolver un "no se pudo" que no le dice qué hacer.
+            if (ocupados.Contains(repartidorId))
+            {
+                _logger.LogInformation(
+                    "Pedido {Codigo}: el repartidor {RepartidorId} está dentro del radio pero ocupado",
+                    pedido.Codigo, repartidorId);
+
+                return new ResultadoAsignacion(
+                    false,
+                    $"El repartidor {repartidorId} tiene una entrega activa y no puede recibir otra",
+                    Motivo: MotivoAsignacion.RepartidorOcupado);
+            }
+
+            _logger.LogInformation(
+                "Pedido {Codigo}: el repartidor {RepartidorId} no está entre los {Candidatos} candidatos del radio de {RadioKm} km",
+                pedido.Codigo, repartidorId, candidatos.Count, _options.RadioKm);
+
+            return new ResultadoAsignacion(
+                false,
+                $"El repartidor {repartidorId} no está dentro del radio del pedido ni tiene telemetría vigente",
+                Motivo: MotivoAsignacion.RepartidorNoEsCandidato);
+        }
+
+        await AsignarAsync(pedido, elegido, "a mano", cancellationToken);
+
+        return new ResultadoAsignacion(
+            true,
+            $"Pedido {pedido.Codigo} asignado a mano al repartidor elegido",
+            elegido.RiderId,
+            elegido.DistanciaMetros);
+    }
+
+    /// <summary>
+    /// El pedido, si está en condiciones de recibir una asignación.
+    ///
+    /// Las dos asignaciones —la automática y la manual— tienen que aceptar y rechazar
+    /// exactamente lo mismo. Si estas validaciones vivieran en cada una, con el tiempo
+    /// aceptarían cosas distintas y solo se notaría en producción.
+    /// </summary>
+    private async Task<(PedidoDisponible? Pedido, ResultadoAsignacion? Error)> PedidoAsignableAsync(
+        Guid pedidoId,
+        CancellationToken cancellationToken)
+    {
+        var pedido = await _db.PedidosDisponibles
+            .FirstOrDefaultAsync(p => p.PedidoId == pedidoId, cancellationToken);
+
+        if (pedido is null)
+        {
+            return (null, new ResultadoAsignacion(
+                false,
+                $"El pedido {pedidoId} no está proyectado en Delivery",
+                Motivo: MotivoAsignacion.PedidoNoEncontrado));
+        }
+
+        // Un pedido tiene un solo domiciliario activo: solo se asigna si sigue en búsqueda.
+        if (pedido.Estado != PedidoDisponible.EstadoBuscando || pedido.RepartidorId is not null)
+        {
+            return (null, new ResultadoAsignacion(
+                false,
+                $"El pedido {pedido.Codigo} no está en búsqueda (estado {pedido.Estado})",
+                Motivo: MotivoAsignacion.EstadoInvalido));
+        }
+
+        if (pedido.Latitud is null || pedido.Longitud is null)
+        {
+            return (null, new ResultadoAsignacion(
+                false,
+                $"El pedido {pedido.Codigo} no tiene punto de entrega: no se puede calcular cercanía",
+                Motivo: MotivoAsignacion.SinPuntoEntrega));
+        }
+
+        return (pedido, null);
     }
 
     public async Task<int> ReintentarPendientesAsync(CancellationToken cancellationToken = default)
@@ -647,7 +787,7 @@ public class AsignacionService : IAsignacionService
         return [.. ocupados];
     }
 
-    private async Task AsignarAsync(PedidoDisponible pedido, UbicacionGps elegido, CancellationToken cancellationToken)
+    private async Task AsignarAsync(PedidoDisponible pedido, UbicacionGps elegido, string origen, CancellationToken cancellationToken)
     {
         var ahora = DateTime.UtcNow;
 
@@ -678,7 +818,7 @@ public class AsignacionService : IAsignacionService
             cancellationToken);
 
         _logger.LogInformation(
-            "Pedido {Codigo} asignado automáticamente al repartidor {RepartidorId} a {Distancia:F0} m",
-            pedido.Codigo, elegido.RiderId, elegido.DistanciaMetros ?? 0);
+            "Pedido {Codigo} asignado {Origen} al repartidor {RepartidorId} a {Distancia:F0} m",
+            pedido.Codigo, origen, elegido.RiderId, elegido.DistanciaMetros ?? 0);
     }
 }
