@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using Deuna.Feedback.Service.DTOs;
 using Deuna.Feedback.Service.Models;
+using Deuna.Shared.Events;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -25,12 +27,18 @@ public class FeedbackService : IFeedbackService
     private readonly FeedbackDbContext _db;
     private readonly FeedbackOptions _options;
     private readonly ILogger<FeedbackService> _logger;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public FeedbackService(FeedbackDbContext db, IOptions<FeedbackOptions> options, ILogger<FeedbackService> logger)
+    public FeedbackService(
+        FeedbackDbContext db,
+        IOptions<FeedbackOptions> options,
+        ILogger<FeedbackService> logger,
+        IPublishEndpoint publishEndpoint)
     {
         _db = db;
         _options = options.Value;
         _logger = logger;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<ResultadoEnvioFeedback> EnviarFeedbackBasicoAsync(
@@ -91,6 +99,18 @@ public class FeedbackService : IFeedbackService
         _logger.LogInformation(
             "Feedback Nivel 1 registrado: EncuestaId={EncuestaId} PedidoId={PedidoId} Comida={Comida} Repartidor={Repartidor}",
             encuesta.Id, encuesta.PedidoId, encuesta.RatingGeneralComida, encuesta.RatingServicioRepartidor);
+
+        // La pantalla de servicios finalizados muestra las dos notas del pedido, y Orders no
+        // puede leer la encuesta sin acoplarse a Feedback en una lectura: se publica acá.
+        // Va DESPUÉS del guardado: anunciar una calificación que no quedó persistida dejaría
+        // a los dos servicios contando historias distintas.
+        await _publishEndpoint.Publish(new CalificacionRegistrada(
+            PedidoId: encuesta.PedidoId,
+            Codigo: pedido.Codigo,
+            RepartidorId: encuesta.RepartidorId,
+            CalificacionRestaurante: encuesta.RatingGeneralComida,
+            CalificacionDomiciliario: encuesta.RatingServicioRepartidor,
+            OccurredAt: DateTime.UtcNow), cancellationToken);
 
         return new ResultadoEnvioFeedback(ResultadoFeedback.Ok, encuesta);
     }

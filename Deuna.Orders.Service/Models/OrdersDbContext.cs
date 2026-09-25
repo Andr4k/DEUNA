@@ -18,6 +18,7 @@ public class OrdersDbContext : DbContext
     public DbSet<HorarioAtencionReplicado> HorariosAtencionReplicados => Set<HorarioAtencionReplicado>();
     public DbSet<AsignacionReplicada> AsignacionesReplicadas => Set<AsignacionReplicada>();
     public DbSet<RepartidorReplicado> RepartidoresReplicados => Set<RepartidorReplicado>();
+    public DbSet<CalificacionReplicada> CalificacionesReplicadas => Set<CalificacionReplicada>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -232,6 +233,20 @@ public class OrdersDbContext : DbContext
             entity.Property(e => e.FotoPerfilUrl).HasMaxLength(500);
             entity.Property(e => e.Activo).IsRequired();
             entity.Property(e => e.CreatedAt).IsRequired();
+        });
+
+        // CalificacionReplicada: la nota del pedido, 1:1. El índice único sobre PedidoId es
+        // la idempotencia del consumidor: una reentrega del evento no duplica la fila.
+        modelBuilder.Entity<CalificacionReplicada>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PedidoId).IsRequired();
+            entity.Property(e => e.CalificacionDomiciliario).IsRequired();
+            entity.Property(e => e.CalificacionRestaurante).IsRequired();
+            entity.Property(e => e.FechaCalificacion).IsRequired();
+
+            entity.HasIndex(e => e.PedidoId).IsUnique();
+            entity.HasIndex(e => e.RepartidorId);
         });
     }
 }
