@@ -38,14 +38,35 @@ public class PedidoCreadoConsumer : IConsumer<PedidoCreado>
             "PedidoCreado recibido: CorrelationId={CorrelationId} PedidoId={PedidoId} RestauranteId={RestauranteId} Codigo={Codigo}",
             correlationId, evento.PedidoId, evento.RestauranteId, evento.Codigo);
 
-        var yaProyectado = await _db.PedidosDisponibles
-            .AnyAsync(p => p.PedidoId == evento.PedidoId, context.CancellationToken);
+        var existente = await _db.PedidosDisponibles
+            .FirstOrDefaultAsync(p => p.PedidoId == evento.PedidoId, context.CancellationToken);
 
-        if (yaProyectado)
+        if (existente is not null)
         {
-            _logger.LogWarning(
-                "PedidoCreado duplicado ignorado: PedidoId={PedidoId} (ya estaba en pedidos_disponibles)",
-                evento.PedidoId);
+            // La fila ya está proyectada. Si le falta el punto y el evento lo trae, se completa:
+            // las filas proyectadas antes de que existieran las columnas de ubicación quedaron
+            // sin punto, y sin punto el pedido no se puede asignar (la validación de asignación y
+            // de candidatos lo exige). Sin esta reparación la reentrega del evento no arreglaba nada.
+            // Si la fila ya tiene el punto, no se reescribe: el duplicado se ignora como antes.
+            if ((existente.Latitud is null || existente.Longitud is null)
+                && evento.Latitud is not null
+                && evento.Longitud is not null)
+            {
+                existente.Latitud = evento.Latitud;
+                existente.Longitud = evento.Longitud;
+                await _db.SaveChangesAsync(context.CancellationToken);
+
+                _logger.LogInformation(
+                    "PedidoCreado reparado: PedidoId={PedidoId} completado con Latitud={Latitud} Longitud={Longitud}",
+                    evento.PedidoId, existente.Latitud, existente.Longitud);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "PedidoCreado duplicado ignorado: PedidoId={PedidoId} (ya estaba en pedidos_disponibles)",
+                    evento.PedidoId);
+            }
+
             return;
         }
 
