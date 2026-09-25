@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Deuna.Orders.Service.Consumers;
 using Deuna.Orders.Service.Models;
 using Deuna.Orders.Service.DTOs;
 using Deuna.Shared.Domain;
@@ -34,10 +35,20 @@ public interface IPedidoService
     /// De solo lectura: no cambia el estado de ningún pedido.
     /// </summary>
     Task<ListaPedidosSinAsignarResponse> ObtenerPedidosSinAsignarAsync(FiltroPedidosSinAsignar filtro);
+
+    /// <summary>
+    /// Historial de servicios finalizados para el panel del administrador: las filas
+    /// paginadas y los KPIs de la cabecera, calculados sobre el MISMO conjunto filtrado.
+    /// De solo lectura: no cambia el estado de ningún pedido.
+    /// </summary>
+    Task<RespuestaServiciosFinalizados> ObtenerServiciosFinalizadosAsync(FiltroServiciosFinalizados filtro);
 }
 
 public class PedidoService : IPedidoService
 {
+    /// <summary>Tipo del contacto que representa al cliente en <c>contactos_pedido</c>.</summary>
+    private const string TipoContactoCliente = "Cliente";
+
     private readonly OrdersDbContext _db;
     private readonly ITarifaService _tarifaService;
     private readonly IGeoService _geoService;
@@ -448,6 +459,309 @@ public class PedidoService : IPedidoService
             Pagina: filtro.Pagina,
             Tamano: filtro.Tamano);
     }
+
+    public async Task<RespuestaServiciosFinalizados> ObtenerServiciosFinalizadosAsync(FiltroServiciosFinalizados filtro)
+    {
+        var (desde, hasta) = VentanaDelHistorial(filtro);
+
+        // UN solo conjunto: de acá salen las filas, el total y los KPIs. Por eso el contador
+        // de la cabecera no puede discrepar de la lista: no hay una segunda consulta que se
+        // pueda desincronizar. La comparación con ayer es el mismo constructor con la ventana
+        // corrida un día, así que también lleva los mismos filtros.
+        var conjunto = AplicarVentana(ConstruirConjuntoFinalizado(filtro), desde, hasta);
+        var conjuntoAyer = AplicarVentana(
+            ConstruirConjuntoFinalizado(filtro), desde.AddDays(-1), hasta.AddDays(-1));
+
+        var total = await conjunto.CountAsync();
+        var items = await ProyectarPaginaAsync(conjunto, filtro.Pagina, filtro.Tamano);
+        var resumen = await ResumirAsync(conjunto, conjuntoAyer);
+
+        return new RespuestaServiciosFinalizados(
+            Pagina: new PaginaServiciosFinalizados(items, total, filtro.Pagina, filtro.Tamano),
+            Resumen: resumen);
+    }
+
+    /// <summary>
+    /// La ventana del rango. Sin <c>Desde</c> arranca hoy a las 00:00 UTC y dura un día: es
+    /// lo que hace que <c>CompletadosHoy</c> sea hoy. <c>Hasta</c> es exclusivo.
+    /// </summary>
+    private static (DateTime Desde, DateTime Hasta) VentanaDelHistorial(FiltroServiciosFinalizados filtro)
+    {
+        var desde = filtro.Desde ?? DateTime.UtcNow.Date;
+        return (desde, filtro.Hasta ?? desde.AddDays(1));
+    }
+
+    private static IQueryable<Pedido> AplicarVentana(IQueryable<Pedido> query, DateTime desde, DateTime hasta) =>
+        query.Where(p => p.FechaEntrega >= desde && p.FechaEntrega < hasta);
+
+    /// <summary>
+    /// El conjunto de servicios finalizados: los pedidos entregados que cumplen los filtros.
+    /// Acá van solo los filtros; la ventana de fechas la aplica <see cref="AplicarVentana"/>,
+    /// para que el mismo conjunto se pueda correr con la ventana de ayer.
+    /// </summary>
+    private IQueryable<Pedido> ConstruirConjuntoFinalizado(FiltroServiciosFinalizados filtro)
+    {
+        // El tipo se declara explícito a propósito: `var` sobre un `Include` infiere
+        // IIncludableQueryable, y después no se le puede asignar el resultado de un Where.
+        IQueryable<Pedido> query = _db.Pedidos.AsNoTracking()
+            .Include(p => p.Restaurante)
+            .Include(p => p.DireccionEntrega)
+            .Include(p => p.Tarifa)
+            // Un servicio finalizado es un pedido entregado: es el único estado en el que la
+            // FechaEntrega existe, y es la fecha del ciclo que ordena el historial.
+            .Where(p => p.Estado == EstadosPedido.Entregado && p.FechaEntrega != null);
+
+        if (filtro.RestauranteId is { } restauranteId)
+        {
+            query = query.Where(p => p.RestauranteId == restauranteId);
+        }
+
+        // La zona es la ciudad de la dirección de entrega: es lo que muestra la columna.
+        if (!string.IsNullOrWhiteSpace(filtro.Zona))
+        {
+            var zona = filtro.Zona.Trim().ToLower();
+            query = query.Where(p => p.DireccionEntrega.Ciudad.ToLower() == zona);
+        }
+
+        if (filtro.RepartidorId is { } repartidorId)
+        {
+            // El domiciliario de la fila es el del intento vigente —el último que no fue
+            // rechazado, la misma regla que AsignacionesDelPedido— y no cualquiera que haya
+            // pasado por el pedido: si no, el filtro traería filas que muestran a otro.
+            query = query.Where(p => _db.AsignacionesReplicadas
+                .Where(a => a.PedidoId == p.Id && a.EstadoAsignacion != AsignacionReplicada.EstadoRechazado)
+                .OrderByDescending(a => a.FechaAsignacion)
+                .Select(a => a.RepartidorId)
+                .FirstOrDefault() == repartidorId);
+        }
+
+        if (filtro.CalificacionMin is { } minima)
+        {
+            // La calificación del servicio es la del restaurante (RatingGeneralComida), la
+            // misma que promedia la cabecera. Un servicio sin encuesta no alcanza ninguna
+            // mínima: no se lo inventa.
+            query = query.Where(p => _db.CalificacionesReplicadas
+                .Where(c => c.PedidoId == p.Id)
+                .Select(c => (int?)c.CalificacionRestaurante)
+                .FirstOrDefault() >= minima);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro.Buscar))
+        {
+            var patron = $"%{filtro.Buscar.Trim()}%";
+
+            // Texto libre sobre lo que la fila muestra: el código del pedido, el nombre del
+            // cliente y la dirección de entrega.
+            query = query.Where(p =>
+                EF.Functions.ILike(p.Codigo, patron) ||
+                EF.Functions.ILike(p.DireccionEntrega.Calle, patron) ||
+                _db.ContactosPedido.Any(c => c.PedidoId == p.Id
+                                             && c.Tipo == TipoContactoCliente
+                                             && EF.Functions.ILike(c.Nombre, patron)));
+        }
+
+        return query;
+    }
+
+    /// <summary>
+    /// La página del historial, ordenada de lo más reciente a lo más viejo.
+    ///
+    /// Los cruces se resuelven en memoria sobre los ids de la página: la asignación es 1:N y
+    /// elegir el intento vigente es una regla, no un join. Traerla como subconsulta por fila
+    /// repetiría esa regla en cada columna y la dejaría a merced de un cambio en una sola.
+    /// </summary>
+    private async Task<List<ServicioFinalizado>> ProyectarPaginaAsync(
+        IQueryable<Pedido> conjunto,
+        int pagina,
+        int tamano)
+    {
+        var pedidos = await conjunto
+            .OrderByDescending(p => p.FechaEntrega)
+            .Skip((pagina - 1) * tamano)
+            .Take(tamano)
+            .ToListAsync();
+
+        if (pedidos.Count == 0)
+        {
+            return [];
+        }
+
+        var pedidoIds = pedidos.Select(p => p.Id).ToList();
+
+        var asignaciones = await _db.AsignacionesReplicadas.AsNoTracking()
+            .Where(a => pedidoIds.Contains(a.PedidoId))
+            .ToListAsync();
+
+        var calificaciones = await _db.CalificacionesReplicadas.AsNoTracking()
+            .Where(c => pedidoIds.Contains(c.PedidoId))
+            .ToListAsync();
+
+        var repartidorIds = asignaciones.Select(a => a.RepartidorId).Distinct().ToList();
+
+        var repartidores = await _db.RepartidoresReplicados.AsNoTracking()
+            .Where(r => repartidorIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id);
+
+        // El promedio histórico del domiciliario: todas sus encuestas, no la del pedido que
+        // muestra la fila.
+        var promedios = await _db.CalificacionesReplicadas.AsNoTracking()
+            .Where(c => c.RepartidorId != null && repartidorIds.Contains(c.RepartidorId.Value))
+            .GroupBy(c => c.RepartidorId!.Value)
+            .Select(g => new
+            {
+                RepartidorId = g.Key,
+                Promedio = g.Average(c => (double)c.CalificacionDomiciliario)
+            })
+            .ToDictionaryAsync(x => x.RepartidorId, x => x.Promedio);
+
+        return pedidos.Select(p =>
+        {
+            var asignacion = AsignacionesDelPedido.Vigente(asignaciones, p.Id);
+            var calificacion = calificaciones.FirstOrDefault(c => c.PedidoId == p.Id);
+
+            return new ServicioFinalizado(
+                PedidoId: p.Id,
+                Codigo: p.Codigo,
+                CerradoEn: p.FechaEntrega!.Value,
+                Restaurante: new RestauranteDelServicio(
+                    Id: p.RestauranteId,
+                    Nombre: p.Restaurante.NombreComercial,
+                    Ciudad: p.Restaurante.Ciudad),
+                Domiciliario: asignacion is null
+                    ? null
+                    : new DomiciliarioDelServicio(
+                        Id: asignacion.RepartidorId,
+                        // El perfil del domiciliario llega por su propio evento y puede no
+                        // estar todavía: se muestra lo que hay, no un nombre inventado.
+                        Nombre: repartidores.TryGetValue(asignacion.RepartidorId, out var repartidor)
+                            ? repartidor.NombreCompleto
+                            : string.Empty,
+                        Calificacion: promedios.TryGetValue(asignacion.RepartidorId, out var promedio)
+                            ? promedio
+                            : null),
+                Origen: new OrigenDelServicio(p.Restaurante.DireccionSede),
+                Destino: new DestinoDelServicio(
+                    Direccion: $"{p.DireccionEntrega.Calle} {p.DireccionEntrega.Numero}".Trim(),
+                    Zona: p.DireccionEntrega.Ciudad),
+                Tiempos: new TiemposDelServicio(
+                    AsignadoEn: asignacion?.FechaAsignacion,
+                    // El hito del local: cuando el domiciliario escaneó el QR del restaurante.
+                    RecogidoEn: asignacion?.FechaLlegadaLocal,
+                    EntregadoEn: p.FechaEntrega.Value,
+                    MinutosTotales: MinutosDelServicio(asignacion?.FechaAsignacion, p.FechaEntrega)),
+                Valor: new ValorDelServicio(
+                    Domicilio: ValorDelDomicilio(p),
+                    Total: p.Total,
+                    // Sin fuente: el plan todavía tiene que decidir de dónde sale quién paga.
+                    Paga: null),
+                Calificaciones: new CalificacionesDelServicio(
+                    Domiciliario: calificacion?.CalificacionDomiciliario,
+                    Restaurante: calificacion?.CalificacionRestaurante),
+                // Sin modelo de incidencias en ningún servicio: el campo viaja para que la
+                // pantalla no cambie cuando exista.
+                Incidencia: new IncidenciaDelServicio(Hay: false, Motivo: null),
+                Estado: p.Estado);
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Los KPIs de la cabecera, calculados sobre el MISMO conjunto que devuelve las filas.
+    /// No hay una consulta "parecida" para los números: si los filtros cambian, cambian para
+    /// los dos, que es lo que evita el contador que dice un número mientras la lista muestra otro.
+    /// </summary>
+    private async Task<ResumenServiciosFinalizados> ResumirAsync(
+        IQueryable<Pedido> conjunto,
+        IQueryable<Pedido> conjuntoAyer)
+    {
+        var completados = await conjunto.CountAsync();
+
+        // El valor de los domicilios es la suma del mismo campo que muestra la columna de
+        // valor de cada fila.
+        var valorDomicilios = await conjunto.SumAsync(
+            p => p.Tarifa != null ? p.Tarifa.TotalCalculado : p.CostoEnvio);
+
+        // La nota del servicio es la del restaurante (RatingGeneralComida), igual que en el
+        // panel de métricas: promediar los dos sujetos —domiciliario y restaurante— daría un
+        // número que no significa nada. Un pedido sin encuesta no entra en el promedio ni en
+        // el conteo.
+        var calificaciones = conjunto.Select(p => _db.CalificacionesReplicadas
+            .Where(c => c.PedidoId == p.Id)
+            .Select(c => (int?)c.CalificacionRestaurante)
+            .FirstOrDefault());
+
+        var calificacionesContadas = await calificaciones.CountAsync(c => c != null);
+        var calificacionPromedio = calificacionesContadas == 0
+            ? null
+            : await calificaciones.AverageAsync(c => (double?)c);
+
+        return new ResumenServiciosFinalizados(
+            CompletadosHoy: completados,
+            ValorDomiciliosHoy: valorDomicilios,
+            CalificacionPromedio: calificacionPromedio,
+            CalificacionesContadas: calificacionesContadas,
+            // Sin modelo de incidencias no hay conteo que dar: null, no 0. Un 0 diría que no
+            // hubo ninguna, y lo que pasa es que no se puede saber.
+            ConIncidencias: null,
+            TiempoPromedioMin: await TiempoPromedioAsync(conjunto),
+            // La variación contra ayer corre el mismo agregado con la ventana corrida un día
+            // y los mismos filtros.
+            Ayer: new AyerDelResumen(
+                Completados: await conjuntoAyer.CountAsync(),
+                ValorDomicilios: await conjuntoAyer.SumAsync(
+                    p => p.Tarifa != null ? p.Tarifa.TotalCalculado : p.CostoEnvio),
+                TiempoPromedioMin: await TiempoPromedioAsync(conjuntoAyer)));
+    }
+
+    /// <summary>
+    /// El tiempo promedio del servicio, sobre el mismo conjunto.
+    ///
+    /// La duración la calcula <see cref="MinutosDelServicio"/>, el mismo helper que usa cada
+    /// fila: acá solo se materializan los dos extremos del cálculo —no la fila entera— porque
+    /// la resta de fechas en minutos no se traduce a SQL de forma portable.
+    /// </summary>
+    private async Task<int?> TiempoPromedioAsync(IQueryable<Pedido> conjunto)
+    {
+        var extremos = await conjunto
+            .Select(p => new
+            {
+                p.FechaEntrega,
+                // El intento vigente: la misma regla que aplica la fila.
+                AsignadoEn = _db.AsignacionesReplicadas
+                    .Where(a => a.PedidoId == p.Id && a.EstadoAsignacion != AsignacionReplicada.EstadoRechazado)
+                    .OrderByDescending(a => a.FechaAsignacion)
+                    .Select(a => (DateTime?)a.FechaAsignacion)
+                    .FirstOrDefault()
+            })
+            .ToListAsync();
+
+        var minutos = extremos
+            .Select(e => MinutosDelServicio(e.AsignadoEn, e.FechaEntrega))
+            .OfType<int>()
+            .ToList();
+
+        // Un promedio que no se puede calcular no viaja en 0: 0 minutos diría que el servicio
+        // se entregó en el acto.
+        return minutos.Count == 0 ? null : (int)Math.Round(minutos.Average());
+    }
+
+    /// <summary>
+    /// La duración del servicio, del momento en que se asignó al momento en que se entregó.
+    ///
+    /// Es el ÚNICO lugar donde se calcula: la usan la columna de cada fila y el KPI de tiempo
+    /// promedio, así que los dos no pueden diferir. Null si falta un extremo —un servicio
+    /// entregado sin asignación registrada no tiene duración— y no 0.
+    /// </summary>
+    private static int? MinutosDelServicio(DateTime? asignadoEn, DateTime? entregadoEn) =>
+        asignadoEn is null || entregadoEn is null
+            ? null
+            : (int)Math.Round((entregadoEn.Value - asignadoEn.Value).TotalMinutes);
+
+    /// <summary>
+    /// El valor del domicilio: la tarifa aplicada y, si el pedido no tiene tarifa, el costo de
+    /// envío que quedó en el pedido. Es el mismo campo que suman la columna y el KPI.
+    /// </summary>
+    private static decimal ValorDelDomicilio(Pedido pedido) =>
+        pedido.Tarifa?.TotalCalculado ?? pedido.CostoEnvio;
 
     private async Task<string> GenerarCodigoPedidoAsync()
     {
