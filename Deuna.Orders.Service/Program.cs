@@ -86,6 +86,10 @@ builder.Services.AddScoped<IPedidoService, PedidoService>();
 builder.Services.AddScoped<ITarifaService, TarifaService>();
 builder.Services.AddScoped<IGeoService, GeoService>();
 
+// Parámetros del panel de pedidos (rangos de prioridad, umbral de "no responde").
+// En configuración desde el primer commit: son decisiones de negocio, no constantes.
+builder.Services.Configure<OrdersOptions>(builder.Configuration.GetSection(OrdersOptions.Seccion));
+
 // Register Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
@@ -125,6 +129,9 @@ app.MapGet("/api/orders/health", () => Results.Ok(new { status = "healthy", serv
 
 // Map Orders Endpoints
 app.MapOrdersEndpoints();
+
+// Panel del administrador (grupo propio con política "admin")
+app.MapAdminOrdersEndpoints();
 
 // Auto-migrate database
 using (var scope = app.Services.CreateScope())
