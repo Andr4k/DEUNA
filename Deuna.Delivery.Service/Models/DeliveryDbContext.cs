@@ -11,6 +11,7 @@ public class DeliveryDbContext : DbContext
     public DbSet<DeliveryTracking> DeliveryTrackings => Set<DeliveryTracking>();
     public DbSet<PedidoDisponible> PedidosDisponibles => Set<PedidoDisponible>();
     public DbSet<RepartidorReplicado> RepartidoresReplicados => Set<RepartidorReplicado>();
+    public DbSet<RestauranteReplicado> RestaurantesReplicados => Set<RestauranteReplicado>();
     public DbSet<AsignacionRepartidor> AsignacionesRepartidor => Set<AsignacionRepartidor>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -49,6 +50,17 @@ public class DeliveryDbContext : DbContext
 
             entity.HasIndex(e => e.Activo);
             entity.HasIndex(e => e.CiudadOperacion);
+        });
+
+        modelBuilder.Entity<RestauranteReplicado>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.NombreComercial).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.DireccionSede).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Ciudad).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.CreatedAt).IsRequired();
+
+            entity.HasIndex(e => e.Activo);
         });
 
         modelBuilder.Entity<AsignacionRepartidor>(entity =>
