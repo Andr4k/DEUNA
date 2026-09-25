@@ -29,6 +29,13 @@ public class RedisTrackingStore : ITrackingStore
     /// </summary>
     public const int MaxCandidatos = 50;
 
+    /// <summary>
+    /// Radio de la búsqueda sin centro que usa el mapa. La distancia máxima entre dos
+    /// puntos de la Tierra es media circunferencia (~20 015 km), así que cualquier radio
+    /// mayor cubre el planeta entero y devuelve la flota completa esté donde esté.
+    /// </summary>
+    public const double RadioGlobalKm = 25000;
+
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisTrackingStore> _logger;
 
@@ -176,6 +183,59 @@ public class RedisTrackingStore : ITrackingStore
         }
 
         return candidatos;
+    }
+
+    /// <summary>
+    /// Todas las posiciones del GEO set, con el timestamp de cada una si lo tienen.
+    ///
+    /// Es GEORADIUS con un radio global y no un recorrido del sorted set: se aprovecha la
+    /// consulta geoespacial nativa, en una sola ida y vuelta a Redis.
+    /// </summary>
+    public async Task<IReadOnlyList<UbicacionGps>> ObtenerTodasAsync(CancellationToken cancellationToken = default)
+    {
+        var db = _redis.GetDatabase();
+
+        var resultados = await db.GeoRadiusAsync(
+            ClaveRepartidores,
+            longitude: 0,
+            latitude: 0,
+            radius: RadioGlobalKm,
+            unit: GeoUnit.Kilometers,
+            options: GeoRadiusOptions.WithCoordinates);
+
+        if (resultados is null || resultados.Length == 0)
+        {
+            return [];
+        }
+
+        // Igual que en BuscarCandidatosAsync: los timestamps se leen de una sola vez.
+        var timestamps = (await db.HashGetAllAsync(ClaveTimestamps))
+            .ToDictionary(h => h.Name.ToString(), h => ParsearTimestamp(h.Value));
+
+        var ubicaciones = new List<UbicacionGps>(resultados.Length);
+        foreach (var resultado in resultados)
+        {
+            if (resultado.Position is null)
+            {
+                continue;
+            }
+
+            var miembro = resultado.Member.ToString();
+            if (!Guid.TryParse(miembro, out var riderId))
+            {
+                _logger.LogWarning("Miembro no interpretable como Guid en {Clave}: {Miembro}", ClaveRepartidores, miembro);
+                continue;
+            }
+
+            ubicaciones.Add(new UbicacionGps(
+                riderId,
+                resultado.Position.Value.Latitude,
+                resultado.Position.Value.Longitude,
+                DistanciaMetros: null,
+                ActualizadoEn: timestamps.TryGetValue(miembro, out var timestamp) ? timestamp : null));
+        }
+
+        return ubicaciones;
     }
 
     private static async Task<DateTime?> LeerTimestampAsync(IDatabase db, string miembro)
