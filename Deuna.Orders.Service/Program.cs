@@ -59,6 +59,8 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<PedidoActualizadoConsumer>();
     // Réplica del domiciliario: el nombre que muestra el historial de servicios finalizados.
     x.AddConsumer<RepartidorRegistradoConsumer>();
+    // Calificación del pedido: las dos notas que muestra el historial de servicios finalizados.
+    x.AddConsumer<CalificacionRegistradaConsumer>();
 
     if (useInMemoryMessaging)
     {
