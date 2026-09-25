@@ -17,6 +17,7 @@ public class OrdersDbContext : DbContext
     public DbSet<ZonaCoberturaReplicada> ZonasCoberturaReplicadas => Set<ZonaCoberturaReplicada>();
     public DbSet<HorarioAtencionReplicado> HorariosAtencionReplicados => Set<HorarioAtencionReplicado>();
     public DbSet<AsignacionReplicada> AsignacionesReplicadas => Set<AsignacionReplicada>();
+    public DbSet<RepartidorReplicado> RepartidoresReplicados => Set<RepartidorReplicado>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -216,6 +217,21 @@ public class OrdersDbContext : DbContext
             // con otra hora.
             entity.HasIndex(e => new { e.PedidoId, e.RepartidorId, e.FechaAsignacion }).IsUnique();
             entity.HasIndex(e => e.PedidoId);
+        });
+
+        // RepartidorReplicado: quién es el domiciliario asignado. El cruce con la asignación
+        // es por RepartidorId, así que no lleva clave foránea a propósito: los dos eventos
+        // viajan por colas distintas y la asignación puede llegar antes que el perfil, y una
+        // FK obligaría a un orden que el flujo no garantiza.
+        modelBuilder.Entity<RepartidorReplicado>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.NombreCompleto).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.DocumentoIdentidad).HasMaxLength(50);
+            entity.Property(e => e.CiudadOperacion).HasMaxLength(100);
+            entity.Property(e => e.FotoPerfilUrl).HasMaxLength(500);
+            entity.Property(e => e.Activo).IsRequired();
+            entity.Property(e => e.CreatedAt).IsRequired();
         });
     }
 }

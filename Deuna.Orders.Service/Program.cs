@@ -57,6 +57,8 @@ builder.Services.AddMassTransit(x =>
     // Mantiene el estado del pedido al día con el ciclo de entrega (TASK-308).
     x.AddConsumer<PedidoAsignadoConsumer>();
     x.AddConsumer<PedidoActualizadoConsumer>();
+    // Réplica del domiciliario: el nombre que muestra el historial de servicios finalizados.
+    x.AddConsumer<RepartidorRegistradoConsumer>();
 
     if (useInMemoryMessaging)
     {
