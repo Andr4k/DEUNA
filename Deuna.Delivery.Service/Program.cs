@@ -57,6 +57,7 @@ builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<PedidoCreadoConsumer>();
     x.AddConsumer<RepartidorRegistradoConsumer>();
+    x.AddConsumer<PedidoCanceladoConsumer>();
     if (useInMemory)
     {
         x.UsingInMemory((context, cfg) =>

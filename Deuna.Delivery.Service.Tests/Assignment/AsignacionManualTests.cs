@@ -256,6 +256,32 @@ public class AsignacionManualTests : IDisposable
     }
 
     [Fact]
+    public async Task UnPedidoCanceladoLiberaAlDomiciliario()
+    {
+        // El punto del consumer de PedidoCancelado. Si el pedido se cancela, el domiciliario
+        // deja de estar ocupado y puede recibir otro; sin esto quedaba trabado para siempre,
+        // porque un pedido cancelado seguía contando como entrega activa.
+        //
+        // Se prueba por el comportamiento público: la asignación que antes se rechaza, después
+        // se acepta. El consumer se encarga de dejar el estado en 'Cancelado' (eso lo fija su
+        // propia suite); acá se prueba que ese estado no ocupa al domiciliario.
+        await UbicarAsync(RiderCercano, 1);
+        var cancelado = await CrearPedidoAsync(PedidoDisponible.EstadoAsignado, RiderCercano);
+        var nuevo = await CrearPedidoAsync();
+
+        var antes = await CrearServicio().AsignarManualmenteAsync(nuevo.PedidoId, RiderCercano);
+        antes.Asignado.Should().BeFalse("todavía tiene una entrega activa");
+        antes.Motivo.Should().Be(MotivoAsignacion.RepartidorOcupado);
+
+        cancelado.Estado = PedidoDisponible.EstadoCancelado;
+        await _db.SaveChangesAsync();
+
+        var despues = await CrearServicio().AsignarManualmenteAsync(nuevo.PedidoId, RiderCercano);
+        despues.Asignado.Should().BeTrue("el pedido cancelado ya no lo ocupa");
+        despues.RepartidorId.Should().Be(RiderCercano);
+    }
+
+    [Fact]
     public async Task NoDejaAsignacionesParcialesCuandoRechaza()
     {
         // Nada a medias: si el elegido no sirve, no queda fila en el historial ni evento.

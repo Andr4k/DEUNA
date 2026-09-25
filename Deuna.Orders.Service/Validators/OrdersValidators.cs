@@ -87,6 +87,18 @@ public class CrearContactoPedidoRequestValidator : AbstractValidator<CrearContac
     }
 }
 
+public class CancelarPedidoRequestValidator : AbstractValidator<CancelarPedidoRequest>
+{
+    public CancelarPedidoRequestValidator()
+    {
+        // El motivo no es decorativo: viaja en el evento y es lo que explica la cancelación
+        // del lado de Delivery, donde el domiciliario puede tener el pedido asignado.
+        RuleFor(x => x.Motivo)
+            .NotEmpty().WithMessage("El motivo de la cancelación es obligatorio")
+            .MaximumLength(300).WithMessage("El motivo es demasiado largo");
+    }
+}
+
 public class CrearPedidoRequestValidator : AbstractValidator<CrearPedidoRequest>
 {
     public CrearPedidoRequestValidator()
