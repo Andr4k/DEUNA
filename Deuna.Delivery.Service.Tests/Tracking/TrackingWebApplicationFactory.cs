@@ -1,9 +1,12 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Deuna.Delivery.Service.Services;
 using Deuna.Shared.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Deuna.Delivery.Service.Tests.Tracking;
@@ -20,10 +23,12 @@ public class TrackingWebApplicationFactory : WebApplicationFactory<Program>
     public const string JwtAudience = "Deuna.Api";
 
     private readonly string _redisConnectionString;
+    private readonly IGeocodificador? _geocodificador;
 
-    public TrackingWebApplicationFactory(string redisConnectionString)
+    public TrackingWebApplicationFactory(string redisConnectionString, IGeocodificador? geocodificador = null)
     {
         _redisConnectionString = redisConnectionString;
+        _geocodificador = geocodificador;
 
         Environment.SetEnvironmentVariable("UseInMemoryDatabase", "true");
         Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", "InMemory");
@@ -37,6 +42,15 @@ public class TrackingWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        // El geocodificador real pega contra Nominatim: en tests se reemplaza por un doble
+        // para que la suite no dependa de que haya red. Sin doble, ningun restaurante se
+        // puede ubicar y la capa sale vacia, que es el comportamiento seguro.
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IGeocodificador>();
+            services.AddSingleton<IGeocodificador>(_geocodificador ?? new GeocodificadorFalso());
+        });
     }
 
     protected override void Dispose(bool disposing)

@@ -88,6 +88,15 @@ builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 builder.Services.AddScoped<ITrackingStore, RedisTrackingStore>();
 builder.Services.AddScoped<ITrackingService, TrackingService>();
 
+// Mapa de la operación. La capa de restaurantes se ubica por su dirección, así que el
+// geocodificador (Nominatim) vive en el grafo del servicio: es un HttpClient tipado con
+// su propio caché, y los restaurantes son fijos.
+builder.Services.Configure<MapaOptions>(builder.Configuration.GetSection(MapaOptions.Seccion));
+builder.Services.Configure<GeocodificacionOptions>(builder.Configuration.GetSection(GeocodificacionOptions.Seccion));
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<IGeocodificador, NominatimGeocodificador>();
+builder.Services.AddScoped<IMapaService, MapaService>();
+
 // Asignación automática (TASK-303): el radio es configurable, no una constante.
 builder.Services.Configure<AsignacionOptions>(builder.Configuration.GetSection(AsignacionOptions.Seccion));
 builder.Services.AddScoped<IAsignacionService, AsignacionService>();
