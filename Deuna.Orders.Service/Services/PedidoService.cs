@@ -19,6 +19,13 @@ public interface IPedidoService
 {
     Task<CrearPedidoResponse> CrearPedidoAsync(CrearPedidoRequest request, HttpContext httpContext);
     Task<PedidoResponse?> ObtenerPedidoAsync(Guid pedidoId);
+
+    /// <summary>
+    /// Cancela un pedido. Solo el restaurante dueño (o un administrador), y solo mientras el
+    /// pedido no esté confirmado en el local: después, la comida ya está en juego.
+    /// Devuelve null si el pedido no existe.
+    /// </summary>
+    Task<PedidoResponse?> CancelarPedidoAsync(Guid pedidoId, string motivo, HttpContext httpContext);
     Task<List<PedidoResponse>> ObtenerPedidosPorClienteAsync(Guid clienteId);
     Task<List<PedidoResponse>> ObtenerPedidosPorRestauranteAsync(Guid restauranteId);
 
@@ -244,6 +251,67 @@ public class PedidoService : IPedidoService
             .FirstOrDefaultAsync(p => p.Id == pedidoId);
 
         if (pedido == null) return null;
+
+        return MapToResponse(pedido);
+    }
+
+    /// <summary>
+    /// El pedido con todo lo que <see cref="MapToResponse"/> necesita.
+    ///
+    /// Las navegaciones se cargan solo si se piden: sin estos Include, mapear revienta con
+    /// un null. Vive acá para que un método nuevo no tenga que recordarlo.
+    /// </summary>
+    private Task<Pedido?> CargarPedidoCompletoAsync(Guid pedidoId) =>
+        _db.Pedidos
+            .Include(p => p.DireccionEntrega)
+            .Include(p => p.Restaurante)
+            .Include(p => p.Items)
+            .Include(p => p.Contactos)
+            .Include(p => p.Tarifa)
+            .FirstOrDefaultAsync(p => p.Id == pedidoId);
+
+    public async Task<PedidoResponse?> CancelarPedidoAsync(Guid pedidoId, string motivo, HttpContext httpContext)
+    {
+        var pedido = await CargarPedidoCompletoAsync(pedidoId);
+        if (pedido is null)
+        {
+            return null;
+        }
+
+        // Mismo criterio que el resto del servicio: el restaurante dueño o un administrador.
+        var userId = httpContext.GetUserId();
+        var rol = httpContext.GetRole();
+
+        if (userId != pedido.RestauranteId && rol != Roles.Admin)
+        {
+            throw new UnauthorizedAccessException("El pedido no pertenece a este restaurante");
+        }
+
+        // Se cancela mientras la comida no esté en juego. Después de confirmar en el local el
+        // domiciliario ya la tiene: eso no se arregla cancelando, y aceptarlo dejaría un
+        // pedido cancelado con la comida repartida.
+        if (pedido.Estado != EstadosPedido.Buscando && pedido.Estado != EstadosPedido.Asignado)
+        {
+            throw new InvalidOperationException(
+                $"El pedido {pedido.Codigo} no se puede cancelar en estado {pedido.Estado}: ya fue confirmado en el local");
+        }
+
+        pedido.Estado = EstadosPedido.Cancelado;
+        pedido.FechaCancelacion = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        // Este evento es lo único que hace que Delivery se entere. Sin él, allá el pedido
+        // sigue contando como activo y el domiciliario queda ocupado para siempre.
+        await _publishEndpoint.Publish(new PedidoCancelado(
+            PedidoId: pedido.Id,
+            Codigo: pedido.Codigo,
+            Motivo: motivo,
+            OccurredAt: pedido.FechaCancelacion.Value));
+
+        _logger.LogInformation(
+            "Pedido {Codigo} cancelado por el restaurante {RestauranteId}: {Motivo}",
+            pedido.Codigo, pedido.RestauranteId, motivo);
 
         return MapToResponse(pedido);
     }

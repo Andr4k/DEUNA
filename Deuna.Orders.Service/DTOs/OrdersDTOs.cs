@@ -64,6 +64,14 @@ public record CrearPedidoResponse(
 );
 
 /// <summary>
+/// Cancelación de un pedido desde el restaurante. El pedido va en la ruta; acá solo viaja
+/// el motivo, que es lo que el cliente y el domiciliario necesitan saber.
+/// </summary>
+public record CancelarPedidoRequest(
+    [Required, MaxLength(300)] string Motivo
+);
+
+/// <summary>
 /// Response completo de un pedido
 /// </summary>
 public record PedidoResponse(
