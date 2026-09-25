@@ -7,6 +7,7 @@ using Deuna.Shared.Security;
 using Deuna.Shared.Extensions;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using NetTopologySuite.Geometries;
 
 namespace Deuna.Orders.Service.Services;
@@ -20,6 +21,12 @@ public interface IPedidoService
     Task<PedidoResponse?> ObtenerPedidoAsync(Guid pedidoId);
     Task<List<PedidoResponse>> ObtenerPedidosPorClienteAsync(Guid clienteId);
     Task<List<PedidoResponse>> ObtenerPedidosPorRestauranteAsync(Guid restauranteId);
+
+    /// <summary>
+    /// Listado paginado de pedidos sin asignar para el panel del administrador.
+    /// De solo lectura: no cambia el estado de ningún pedido.
+    /// </summary>
+    Task<ListaPedidosSinAsignarResponse> ObtenerPedidosSinAsignarAsync(FiltroPedidosSinAsignar filtro);
 }
 
 public class PedidoService : IPedidoService
@@ -28,6 +35,7 @@ public class PedidoService : IPedidoService
     private readonly ITarifaService _tarifaService;
     private readonly IGeoService _geoService;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IOptions<OrdersOptions> _ordersOptions;
     private readonly ILogger<PedidoService> _logger;
 
     public PedidoService(
@@ -35,12 +43,14 @@ public class PedidoService : IPedidoService
         ITarifaService tarifaService,
         IGeoService geoService,
         IPublishEndpoint publishEndpoint,
+        IOptions<OrdersOptions> ordersOptions,
         ILogger<PedidoService> logger)
     {
         _db = db;
         _tarifaService = tarifaService;
         _geoService = geoService;
         _publishEndpoint = publishEndpoint;
+        _ordersOptions = ordersOptions;
         _logger = logger;
     }
 
@@ -266,6 +276,109 @@ public class PedidoService : IPedidoService
             .ToListAsync();
 
         return pedidos.Select(MapToResponse).ToList();
+    }
+
+    public async Task<ListaPedidosSinAsignarResponse> ObtenerPedidosSinAsignarAsync(FiltroPedidosSinAsignar filtro)
+    {
+        var ahora = DateTime.UtcNow;
+        var opciones = _ordersOptions.Value;
+
+        // El tipo se declara explícito a propósito: `var` sobre un `Include` infiere
+        // IIncludableQueryable, y después no se le puede asignar el resultado de un
+        // Where. La consulta se arma por partes y todas devuelven IQueryable.
+        IQueryable<Pedido> query = _db.Pedidos.AsNoTracking()
+            .Include(p => p.Restaurante)
+            .Include(p => p.DireccionEntrega)
+            .Include(p => p.Tarifa);
+
+        // "Sin asignar" es el estado Buscando: el pedido al que el sistema no le encontró
+        // candidato dentro del radio. Un Asignado solo entra si el umbral de "no responde"
+        // está configurado (> 0): en 0 el filtro queda apagado y no se suma ninguno, porque
+        // el criterio real todavía no está definido.
+        if (filtro.IncluirSinRespuesta && opciones.MinutosSinRespuesta > 0)
+        {
+            var corte = ahora.AddMinutes(-opciones.MinutosSinRespuesta);
+
+            // Un pedido puede pasar por varios domiciliarios (1:N): vale la ÚLTIMA
+            // asignación. Si nunca se asignó, el MAX es NULL y la comparación no se cumple,
+            // así que un Asignado sin historial queda fuera.
+            query = query.Where(p =>
+                p.Estado == EstadosPedido.Buscando ||
+                (p.Estado == EstadosPedido.Asignado &&
+                 _db.AsignacionesReplicadas
+                     .Where(a => a.PedidoId == p.Id)
+                     .Max(a => (DateTime?)a.FechaAsignacion) <= corte));
+        }
+        else
+        {
+            query = query.Where(p => p.Estado == EstadosPedido.Buscando);
+        }
+
+        // La zona es la ciudad del restaurante: no hay geometría de zona en Orders.
+        if (!string.IsNullOrWhiteSpace(filtro.Zona))
+        {
+            var zona = filtro.Zona.Trim().ToLower();
+            query = query.Where(p => p.Restaurante.Ciudad.ToLower() == zona);
+        }
+
+        // El valor del domicilio es la tarifa aplicada; si el pedido no tiene tarifa, cae
+        // al costo de envío que quedó en el pedido.
+        if (!string.IsNullOrWhiteSpace(filtro.Prioridad))
+        {
+            var prioridad = filtro.Prioridad.Trim();
+            query = prioridad switch
+            {
+                OrdersOptions.PrioridadAlta => query.Where(p =>
+                    (p.Tarifa != null ? p.Tarifa.TotalCalculado : p.CostoEnvio) >= opciones.PrioridadAltaDesde),
+                OrdersOptions.PrioridadMedia => query.Where(p =>
+                    (p.Tarifa != null ? p.Tarifa.TotalCalculado : p.CostoEnvio) >= opciones.PrioridadMediaDesde &&
+                    (p.Tarifa != null ? p.Tarifa.TotalCalculado : p.CostoEnvio) < opciones.PrioridadAltaDesde),
+                _ => query.Where(p =>
+                    (p.Tarifa != null ? p.Tarifa.TotalCalculado : p.CostoEnvio) < opciones.PrioridadMediaDesde)
+            };
+        }
+
+        if (filtro.EsperaMin is > 0)
+        {
+            // Espera mayor o igual a N minutos equivale a haber nacido antes del corte.
+            var corteEspera = ahora.AddMinutes(-filtro.EsperaMin.Value);
+            query = query.Where(p => p.FechaCreacion <= corteEspera);
+        }
+
+        // El total es el de la lista completa: la paginación no lo recorta.
+        var total = await query.CountAsync();
+
+        // Orden por defecto: valor descendente (primero los de valor más alto) y, a igual
+        // valor, los que más llevan esperando (fecha de creación más antigua primero).
+        var pedidos = await query
+            .OrderByDescending(p => p.Tarifa != null ? p.Tarifa.TotalCalculado : p.CostoEnvio)
+            .ThenBy(p => p.FechaCreacion)
+            .Skip((filtro.Pagina - 1) * filtro.Tamano)
+            .Take(filtro.Tamano)
+            .ToListAsync();
+
+        var items = pedidos.Select(p =>
+        {
+            var valor = p.Tarifa?.TotalCalculado ?? p.CostoEnvio;
+            return new PedidoSinAsignarItem(
+                PedidoId: p.Id,
+                Codigo: p.Codigo,
+                Restaurante: p.Restaurante.NombreComercial,
+                RecogerEn: $"{p.Restaurante.DireccionSede}, {p.Restaurante.Ciudad}",
+                EntregarEn: $"{p.DireccionEntrega.Calle} {p.DireccionEntrega.Numero}, {p.DireccionEntrega.Ciudad}",
+                GeneradoEn: p.FechaCreacion,
+                MinutosEsperando: (int)Math.Max(0, (ahora - p.FechaCreacion).TotalMinutes),
+                Prioridad: opciones.PrioridadPara(valor),
+                ValorDomicilio: valor,
+                Zona: p.Restaurante.Ciudad,
+                Estado: p.Estado);
+        }).ToList();
+
+        return new ListaPedidosSinAsignarResponse(
+            Items: items,
+            Total: total,
+            Pagina: filtro.Pagina,
+            Tamano: filtro.Tamano);
     }
 
     private async Task<string> GenerarCodigoPedidoAsync()

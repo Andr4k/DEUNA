@@ -148,6 +148,14 @@ internal static class TestJwt
     public static string CreateRestaurantToken(Guid restauranteId) =>
         CreateToken(restauranteId, Roles.Restaurant, "restaurant@test.com");
 
+    /// <summary>
+    /// Token con rol ADMIN. Las rutas del panel de administración exigen la política
+    /// "admin" (Roles.Admin), que el token de restaurante no satisface: sin este emisor
+    /// no habría forma de probar una ruta de administrador desde los tests.
+    /// </summary>
+    public static string CreateAdminToken(Guid adminId) =>
+        CreateToken(adminId, Roles.Admin, "admin@test.com");
+
     private static string CreateToken(Guid subject, string role, string email)
     {
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(SecretKey));
