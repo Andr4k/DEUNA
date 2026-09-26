@@ -25,6 +25,10 @@ public class IdentityDbContext : DbContext
     public DbSet<PermisoAdministrador> PermisosAdministrador => Set<PermisoAdministrador>();
     public DbSet<AuditoriaAdministrador> AuditoriasAdministrador => Set<AuditoriaAdministrador>();
 
+    // Gestión de usuarios
+    public DbSet<Recurso> Recursos => Set<Recurso>();
+    public DbSet<PermisoUsuario> PermisosUsuario => Set<PermisoUsuario>();
+
     // Auth
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
@@ -74,6 +78,11 @@ public class IdentityDbContext : DbContext
             entity.HasOne(e => e.PerfilAdministrador)
                 .WithOne(p => p.Usuario)
                 .HasForeignKey<PerfilAdministrador>(p => p.UsuarioId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Permisos)
+                .WithOne(p => p.Usuario)
+                .HasForeignKey(p => p.UsuarioId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -294,6 +303,40 @@ public class IdentityDbContext : DbContext
             entity.HasIndex(e => e.PerfilAdministradorId).HasDatabaseName("ix_auditoria_admin");
             entity.HasIndex(e => e.CreatedAt).HasDatabaseName("ix_auditoria_admin_fecha");
             entity.HasIndex(e => e.Accion).HasDatabaseName("ix_auditoria_admin_accion");
+        });
+
+        // ========== GESTIÓN DE USUARIOS ==========
+        modelBuilder.Entity<Recurso>(entity =>
+        {
+            entity.ToTable("recursos");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Servicio).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Clave).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Nombre).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Descripcion).HasMaxLength(500);
+            entity.Property(e => e.Acciones).HasMaxLength(200);
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt);
+            // Un servicio no expone dos veces la misma clave.
+            entity.HasIndex(e => new { e.Servicio, e.Clave }).IsUnique().HasDatabaseName("ix_recursos_servicio_clave");
+        });
+
+        modelBuilder.Entity<PermisoUsuario>(entity =>
+        {
+            entity.ToTable("permisos_usuarios");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UsuarioId).IsRequired();
+            entity.Property(e => e.Permiso).IsRequired();
+            entity.Property(e => e.Recurso).HasMaxLength(100);
+            entity.Property(e => e.Accion).HasMaxLength(50);
+            entity.Property(e => e.Observaciones).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt);
+            entity.HasIndex(e => e.UsuarioId).HasDatabaseName("ix_permisos_usuarios");
+            // La acción entra en la clave: un mismo recurso puede tener varias (leer y
+            // editar son permisos distintos). El índice del molde, sin Accion, haría
+            // fallar el segundo permiso del mismo recurso.
+            entity.HasIndex(e => new { e.UsuarioId, e.Permiso, e.Recurso, e.Accion }).IsUnique().HasDatabaseName("ix_permisos_usuarios_unique");
         });
 
         // ========== REFRESH TOKENS ==========
