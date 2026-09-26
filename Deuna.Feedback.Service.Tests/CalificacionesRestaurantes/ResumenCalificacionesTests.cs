@@ -284,4 +284,180 @@ public class ResumenCalificacionesTests : IAsyncLifetime
         resumen.TotalCalificaciones.Should().Be(2);
         resumen.CalificacionesHoy.Should().Be(1);
     }
+
+    // ---------------------------------------------------------------- variaciones
+
+    [Fact]
+    public async Task LasVariaciones_ComparanElPromedioYElTotalContraElPeriodoAnterior()
+    {
+        var pizza = Guid.NewGuid();
+
+        await EnLaBaseAsync(async db =>
+        {
+            db.RestaurantesReplicados.Add(Restaurante(pizza, "Pizza Roma", "Medellín"));
+            // En el rango: dos calificaciones de 5.
+            db.FeedbackEncuestas.Add(Encuesta(pizza, 5, Inicio.AddDays(1)));
+            db.FeedbackEncuestas.Add(Encuesta(pizza, 5, Inicio.AddDays(2)));
+            // En el período anterior, que es este mismo rango corrido 30 días hacia atrás:
+            // una calificación de 3.
+            db.FeedbackEncuestas.Add(Encuesta(pizza, 3, Inicio.AddDays(-20)));
+            await db.SaveChangesAsync();
+        });
+
+        var resumen = await ResumirAsync();
+
+        resumen.PromedioGlobal.Should().BeApproximately(5, 0.0001);
+        resumen.TotalCalificaciones.Should().Be(2);
+
+        // El promedio se compara en PUNTOS (5 - 3 = 2), no en porcentaje: el promedio va de
+        // 1 a 5 y lo que se lee en pantalla es "subió 0.3".
+        resumen.Variaciones.PromedioVsPeriodoAnterior.Should().BeApproximately(2, 0.0001);
+        // El total, en cambio, es porcentual: (2 - 1) / 1 = 100%.
+        resumen.Variaciones.TotalVsPeriodoAnterior.Should().BeApproximately(100, 0.0001);
+    }
+
+    [Fact]
+    public async Task SinPeriodoAnterior_LasVariacionesSonNull_NoCero()
+    {
+        var pizza = Guid.NewGuid();
+
+        await EnLaBaseAsync(async db =>
+        {
+            db.RestaurantesReplicados.Add(Restaurante(pizza, "Pizza Roma", "Medellín"));
+            // Solo dentro del rango: el período anterior queda vacío, que es lo que hay que
+            // saber distinguir de "no cambió nada".
+            db.FeedbackEncuestas.Add(Encuesta(pizza, 5, Inicio.AddDays(1)));
+            await db.SaveChangesAsync();
+        });
+
+        var resumen = await ResumirAsync();
+
+        resumen.PromedioGlobal.Should().BeApproximately(5, 0.0001);
+
+        // Sin base no hay variación: un 0% diría que no cambió nada, y un -100% que se
+        // derrumbó. Lo que pasa es que no sabemos.
+        resumen.Variaciones.PromedioVsPeriodoAnterior.Should().BeNull();
+        resumen.Variaciones.TotalVsPeriodoAnterior.Should().BeNull();
+        // Tampoco hubo ayer, así que ese porcentaje tampoco tiene base.
+        resumen.Variaciones.HoyVsAyer.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HoyVsAyer_ComparaLasCalificacionesDeHoyContraLasDeAyer()
+    {
+        var pizza = Guid.NewGuid();
+        var ahora = DateTime.UtcNow;
+
+        // Las de hoy se ubican dentro del día por su hora y no restando horas a "ahora": una
+        // corrida a las 00:10 de la mañana dejaría el "hace dos horas" en el día de ayer.
+        var manana = ahora.Date.AddDays(1);
+
+        await EnLaBaseAsync(async db =>
+        {
+            db.RestaurantesReplicados.Add(Restaurante(pizza, "Pizza Roma", "Medellín"));
+            db.FeedbackEncuestas.Add(Encuesta(pizza, 5, ahora.Date.AddMinutes(30)));
+            db.FeedbackEncuestas.Add(Encuesta(pizza, 4, ahora.Date.AddMinutes(90)));
+            db.FeedbackEncuestas.Add(Encuesta(pizza, 3, ahora.Date.AddDays(-1).AddHours(12)));
+            await db.SaveChangesAsync();
+        });
+
+        var resumen = await ResumirAsync(new FiltroCalificacionesRestaurantes(
+            Desde: ahora.Date.AddDays(-3),
+            Hasta: manana));
+
+        resumen.CalificacionesHoy.Should().Be(2);
+        // Contra la de ayer, que es la base: (2 - 1) / 1 = 100%.
+        resumen.Variaciones.HoyVsAyer.Should().BeApproximately(100, 0.0001);
+    }
+
+    // ---------------------------------------------------------------- aspectos globales
+
+    [Fact]
+    public async Task LosAspectosDelResumen_SalenDelMismoConjuntoFiltradoQueLasFilas()
+    {
+        var medellin = Guid.NewGuid();
+        var bogota = Guid.NewGuid();
+
+        await EnLaBaseAsync(async db =>
+        {
+            db.RestaurantesReplicados.Add(Restaurante(medellin, "Pizza Roma", "Medellín"));
+            db.RestaurantesReplicados.Add(Restaurante(bogota, "Sushi Nikkei", "Bogotá"));
+
+            var primera = Encuesta(medellin, 5, Inicio.AddDays(1));
+            var segunda = Encuesta(medellin, 5, Inicio.AddDays(2));
+            var deBogota = Encuesta(bogota, 2, Inicio.AddDays(1));
+            db.FeedbackEncuestas.AddRange(primera, segunda, deBogota);
+
+            // Medellín califica "Sabor" con 4 y con 5, y "Empaque" con 2. Bogotá califica
+            // "Sabor" con 1: es el que NO tiene que entrar en los aspectos del resumen.
+            db.FeedbackDetallesCriterios.AddRange(
+                new FeedbackDetalleCriterio { EncuestaId = primera.Id, Criterio = "Sabor", Puntaje = 4 },
+                new FeedbackDetalleCriterio { EncuestaId = primera.Id, Criterio = "Empaque", Puntaje = 2 },
+                new FeedbackDetalleCriterio { EncuestaId = segunda.Id, Criterio = "Sabor", Puntaje = 5 },
+                new FeedbackDetalleCriterio { EncuestaId = deBogota.Id, Criterio = "Sabor", Puntaje = 1 });
+            await db.SaveChangesAsync();
+        });
+
+        var filtro = new FiltroCalificacionesRestaurantes(Desde: Inicio, Hasta: Fin, Zona: "Medellín");
+
+        var pagina = await ConsultarAsync(filtro);
+        var resumen = await ResumirAsync(filtro);
+
+        // Las filas y los KPIs, del mismo conjunto: un restaurante calificado, dos de sus
+        // calificaciones.
+        pagina.Items.Should().ContainSingle().Which.Nombre.Should().Be("Pizza Roma");
+        resumen.RestaurantesCalificados.Should().Be(pagina.Items.Count);
+        resumen.TotalCalificaciones.Should().Be(2);
+
+        // Y los aspectos también. Si el resumen los calculara por su lado —sobre el rango
+        // entero, ignorando el filtro— el "Sabor" de Bogotá entraría y este promedio sería
+        // 3,3 sobre tres calificaciones en vez de 4,5 sobre dos.
+        resumen.Aspectos.Should().HaveCount(2);
+
+        var sabor = resumen.Aspectos.Should().ContainSingle(a => a.Criterio == "Sabor").Which;
+        sabor.Promedio.Should().BeApproximately(4.5, 0.0001);
+        sabor.Cantidad.Should().Be(2);
+
+        var empaque = resumen.Aspectos.Should().ContainSingle(a => a.Criterio == "Empaque").Which;
+        empaque.Promedio.Should().BeApproximately(2, 0.0001);
+        empaque.Cantidad.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task LasVariaciones_TambienSalenDelConjuntoFiltrado()
+    {
+        var medellin = Guid.NewGuid();
+        var bogota = Guid.NewGuid();
+
+        await EnLaBaseAsync(async db =>
+        {
+            db.RestaurantesReplicados.Add(Restaurante(medellin, "Pizza Roma", "Medellín"));
+            db.RestaurantesReplicados.Add(Restaurante(bogota, "Sushi Nikkei", "Bogotá"));
+
+            // En el rango: dos de Medellín y una de Bogotá.
+            db.FeedbackEncuestas.Add(Encuesta(medellin, 5, Inicio.AddDays(1)));
+            db.FeedbackEncuestas.Add(Encuesta(medellin, 5, Inicio.AddDays(2)));
+            db.FeedbackEncuestas.Add(Encuesta(bogota, 2, Inicio.AddDays(1)));
+
+            // En el período anterior: una de Medellín y tres de Bogotá. Contra el rango entero
+            // la base del porcentaje serían cuatro, y el promedio anterior 1,5 en vez de 3.
+            db.FeedbackEncuestas.Add(Encuesta(medellin, 3, Inicio.AddDays(-20)));
+            db.FeedbackEncuestas.Add(Encuesta(bogota, 1, Inicio.AddDays(-20)));
+            db.FeedbackEncuestas.Add(Encuesta(bogota, 1, Inicio.AddDays(-19)));
+            db.FeedbackEncuestas.Add(Encuesta(bogota, 1, Inicio.AddDays(-18)));
+            await db.SaveChangesAsync();
+        });
+
+        var filtro = new FiltroCalificacionesRestaurantes(Desde: Inicio, Hasta: Fin, Zona: "Medellín");
+
+        var pagina = await ConsultarAsync(filtro);
+        var resumen = await ResumirAsync(filtro);
+
+        pagina.Items.Should().ContainSingle().Which.Nombre.Should().Be("Pizza Roma");
+        resumen.TotalCalificaciones.Should().Be(2);
+
+        // El promedio anterior es el de Medellín (3) y el total anterior, 1.
+        resumen.Variaciones.PromedioVsPeriodoAnterior.Should().BeApproximately(2, 0.0001);
+        resumen.Variaciones.TotalVsPeriodoAnterior.Should().BeApproximately(100, 0.0001);
+    }
 }
