@@ -2,6 +2,7 @@ using Deuna.Feedback.Service.Consumers;
 using Deuna.Feedback.Service.Endpoints;
 using Deuna.Feedback.Service.Models;
 using Deuna.Feedback.Service.Services;
+using Deuna.Shared.Extensions;
 using Deuna.Shared.Messaging;
 using FluentValidation;
 using MassTransit;
@@ -70,6 +71,9 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
+// Use shared JWT authentication
+builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
+
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
 builder.Services.AddScoped<ICalificacionesRestaurantesService, CalificacionesRestaurantesService>();
@@ -88,6 +92,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging();
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Middleware compartido de JWT, después de UseAuthentication/UseAuthorization (igual que Orders).
+app.UseDeunaJwtMiddleware();
 
 app.MapHealthChecks("/health");
 
@@ -97,6 +106,9 @@ app.MapGet("/api/feedback/health", () => Results.Ok(new { status = "healthy", se
 
 // Feedback Nivel 1 (TASK-401)
 app.MapFeedbackEndpoints();
+
+// Panel del administrador (grupo propio con política "admin")
+app.MapAdminFeedbackEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {

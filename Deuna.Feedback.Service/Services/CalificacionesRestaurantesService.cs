@@ -61,24 +61,9 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
         var aspectos = await ObtenerAspectosAsync(restauranteIds, filtro, cancellationToken);
         var anteriores = await ObtenerPromediosAnterioresAsync(restauranteIds, filtro, cancellationToken);
 
-        var items = pagina.Select(fila => new CalificacionDeRestaurante(
-            RestauranteId: fila.RestauranteId,
-            Nombre: fila.Nombre,
-            Zona: fila.Zona,
-            // No hay fuente de tipo de comida en ningún servicio: null, no una cadena vacía
-            // que se leería como "sin tipo" en vez de "sin dato".
-            TipoDeComida: null,
-            CalificacionPromedio: fila.Promedio,
-            TotalCalificaciones: fila.Total,
-            Distribucion: fila.Distribucion,
-            Aspectos: aspectos.TryGetValue(fila.RestauranteId, out var delRestaurante) ? delRestaurante : [],
-            Tendencia: new TendenciaDelRestaurante(
-                anteriores.TryGetValue(fila.RestauranteId, out var anterior)
-                    ? Variacion(fila.Promedio, anterior)
-                    : null),
-            // Sin modelo de incidencias: el campo viaja para que la pantalla no cambie cuando
-            // exista, y en null porque un 0 diría que no hubo ninguna.
-            Incidencias: null)).ToList();
+        var items = pagina
+            .Select(fila => AFilaDeLaTabla(fila, aspectos, anteriores))
+            .ToList();
 
         return new PaginaCalificacionesRestaurantes(
             Items: items,
@@ -133,6 +118,57 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
                     Total: f.Total))
                 .ToList());
     }
+
+    public async Task<CalificacionDeRestaurante?> ObtenerCalificacionAsync(
+        Guid restauranteId,
+        FiltroCalificacionesRestaurantes filtro,
+        CancellationToken cancellationToken = default)
+    {
+        // El mismo conjunto filtrado que la lista: el detalle es la fila que abre el botón de
+        // la tabla, así que no puede salir de una consulta propia que después diverja del
+        // promedio que la tabla ya mostró.
+        var conjunto = await ConstruirConjuntoAsync(filtro, cancellationToken);
+
+        var fila = conjunto.FirstOrDefault(f => f.RestauranteId == restauranteId);
+
+        if (fila is null)
+        {
+            return null;
+        }
+
+        // Los dos cruces por fila se piden solo para este restaurante.
+        var aspectos = await ObtenerAspectosAsync([restauranteId], filtro, cancellationToken);
+        var anteriores = await ObtenerPromediosAnterioresAsync([restauranteId], filtro, cancellationToken);
+
+        return AFilaDeLaTabla(fila, aspectos, anteriores);
+    }
+
+    /// <summary>
+    /// La fila de la tabla a partir del agregado. Un solo lugar arma la respuesta, así que la
+    /// lista y el detalle no pueden devolver dos formas distintas del mismo restaurante.
+    /// </summary>
+    private static CalificacionDeRestaurante AFilaDeLaTabla(
+        FilaAgregada fila,
+        Dictionary<Guid, List<AspectoCalificado>> aspectos,
+        Dictionary<Guid, double> anteriores)
+        => new(
+            RestauranteId: fila.RestauranteId,
+            Nombre: fila.Nombre,
+            Zona: fila.Zona,
+            // No hay fuente de tipo de comida en ningún servicio: null, no una cadena vacía
+            // que se leería como "sin tipo" en vez de "sin dato".
+            TipoDeComida: null,
+            CalificacionPromedio: fila.Promedio,
+            TotalCalificaciones: fila.Total,
+            Distribucion: fila.Distribucion,
+            Aspectos: aspectos.TryGetValue(fila.RestauranteId, out var delRestaurante) ? delRestaurante : [],
+            Tendencia: new TendenciaDelRestaurante(
+                anteriores.TryGetValue(fila.RestauranteId, out var anterior)
+                    ? Variacion(fila.Promedio, anterior)
+                    : null),
+            // Sin modelo de incidencias: el campo viaja para que la pantalla no cambie cuando
+            // exista, y en null porque un 0 diría que no hubo ninguna.
+            Incidencias: null);
 
     /// <summary>
     /// El conjunto filtrado: una fila por restaurante con sus calificaciones del rango ya
