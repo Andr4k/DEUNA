@@ -32,6 +32,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("UseInMemoryDatabase", "true");
         Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", "InMemory");
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Testing");
+        // El panel de calificaciones valida JWT: el servicio tiene que leer la misma clave con la
+        // que los tests firman sus tokens. Iguales para toda factory, así que no hay carrera.
+        Environment.SetEnvironmentVariable("Jwt__SecretKey", TestJwt.SecretKey);
+        Environment.SetEnvironmentVariable("Jwt__Issuer", TestJwt.Issuer);
+        Environment.SetEnvironmentVariable("Jwt__Audience", TestJwt.Audience);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

@@ -270,6 +270,12 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: "http://+:8080"
       ConnectionStrings__DefaultConnection: "Host=postgres-feedback;Port=5432;Database=deuna_feedback;Username=deuna_user;Password=${POSTGRES_PASSWORD:-deuna_dev_2026}"
+      # Feedback ahora valida el JWT del panel de calificaciones. Sin estas claves usa los
+      # valores por defecto de Deuna.Shared, que no son los que emite Identity, y toda llamada
+      # al panel responde 401 aunque el token sea correcto.
+      Jwt__SecretKey: "DeunaSuperSecretKey2026!@#$%^&*()_+-=[]{}|;:,.<>?"
+      Jwt__Issuer: "Deuna.Identity"
+      Jwt__Audience: "Deuna.Api"
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Port: 5672
       RabbitMQ__Username: ${RABBITMQ_USER:-deuna}

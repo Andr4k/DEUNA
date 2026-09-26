@@ -27,4 +27,14 @@ public interface ICalificacionesRestaurantesService
     Task<ResumenCalificacionesRestaurantes> ObtenerResumenAsync(
         FiltroCalificacionesRestaurantes filtro,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// La fila de un restaurante —la que abre "ver detalle" en la tabla— leída del MISMO
+    /// conjunto filtrado que devuelve la lista, no de una consulta propia que pueda divergir.
+    /// Devuelve null cuando el restaurante no tiene calificaciones en la ventana.
+    /// </summary>
+    Task<CalificacionDeRestaurante?> ObtenerCalificacionAsync(
+        Guid restauranteId,
+        FiltroCalificacionesRestaurantes filtro,
+        CancellationToken cancellationToken = default);
 }
