@@ -93,6 +93,14 @@ public class RestauranteReplicado
     [MaxLength(255)]
     public string NombreComercial { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Ciudad de la sede. La pantalla de calificaciones muestra la zona del restaurante y
+    /// filtra por ella, y el evento <c>RestauranteRegistrado</c> ya la trae: sin guardarla,
+    /// la réplica no puede resolver el nombre y la zona de una fila.
+    /// </summary>
+    [MaxLength(100)]
+    public string Ciudad { get; set; } = string.Empty;
+
     public bool Activo { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
