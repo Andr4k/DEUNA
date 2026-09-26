@@ -18,8 +18,6 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .Enrich.FromLogContext()
     .WriteTo.Console());
 
-Log.Information("Starting Deuna Feedback Service");
-
 builder.Services.AddOpenApi();
 
 var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase", false);
@@ -85,6 +83,10 @@ ConfigureHealthChecks(builder.Services, builder.Configuration, useInMemory);
 
 var app = builder.Build();
 
+// El logger estatico de Serilog solo queda enganchado cuando el host esta construido:
+// una llamada a Log.X antes de Build() cae a un logger silencioso y se pierde.
+app.Logger.LogInformation("Starting Deuna Feedback Service");
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -123,7 +125,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-Log.Information("Deuna Feedback Service started successfully");
+app.Logger.LogInformation("Deuna Feedback Service started successfully");
 await app.RunAsync();
 
 static void ConfigureHealthChecks(IServiceCollection services, IConfiguration configuration, bool useInMemory)
