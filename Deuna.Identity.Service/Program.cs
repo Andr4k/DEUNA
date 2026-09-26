@@ -77,6 +77,7 @@ builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 // Register Auth Service
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAuthorizationCodeService, AuthorizationCodeService>();
+builder.Services.AddScoped<IGestionUsuariosService, GestionUsuariosService>();
 
 // Register Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
@@ -143,6 +144,9 @@ app.MapGet("/api/identity/health", () => Results.Ok(new { status = "healthy", se
 
 // Map Auth Endpoints
 app.MapAuthEndpoints();
+
+// Endpoints admin del portal (gestión de usuarios)
+app.MapUsuariosAdminEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {
