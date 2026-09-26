@@ -79,6 +79,10 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAuthorizationCodeService, AuthorizationCodeService>();
 builder.Services.AddScoped<IGestionUsuariosService, GestionUsuariosService>();
 
+// Resuelve los permisos por recurso y acción: la capa que decide si el usuario PUEDE,
+// distinta del rol y de la forma del pedido.
+builder.Services.AddScoped<IPermisoService, PermisoService>();
+
 // Register Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
@@ -160,6 +164,13 @@ using (var scope = app.Services.CreateScope())
     {
         await db.Database.EnsureCreatedAsync();
     }
+
+    // La siembra del arranque: el catálogo de recursos y el acceso del administrador
+    // sembrado. Va después de migrar o de crear el esquema, que es la tabla donde escribe.
+    await SembradoIdentity.SembrarAsync(
+        db,
+        scope.ServiceProvider.GetRequiredService<IPermisoService>(),
+        app.Logger);
 }
 
 app.Logger.LogInformation("Deuna Identity Service started successfully");

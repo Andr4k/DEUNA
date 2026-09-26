@@ -20,6 +20,13 @@ internal static class TestJwt
     public static string CreateAdminToken() =>
         CreateToken(Guid.NewGuid(), Roles.Admin, "admin@deuna.test");
 
+    /// <summary>
+    /// Token de administrador para un usuario concreto: la verificación de permisos mira el
+    /// `sub`, así que el test necesita que el token apunte al usuario que sembró.
+    /// </summary>
+    public static string CreateAdminToken(Guid subject) =>
+        CreateToken(subject, Roles.Admin, "admin@deuna.test");
+
     public static string CreateRestaurantToken() =>
         CreateToken(Guid.NewGuid(), Roles.Restaurant, "restaurant@deuna.test");
 
