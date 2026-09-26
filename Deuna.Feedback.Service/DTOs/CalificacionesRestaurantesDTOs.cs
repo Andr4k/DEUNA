@@ -79,6 +79,19 @@ public record AspectoCalificado(
     double Promedio,
     int Cantidad);
 
+/// <summary>
+/// El promedio de un aspecto sobre TODO el filtro, no sobre una página: es la misma forma que
+/// <see cref="AspectoCalificado"/> —el criterio sigue siendo texto libre, así que se devuelven
+/// los que existan y no un conjunto fijo de nombres—, con otro alcance.
+///
+/// Se agrega sobre el mismo conjunto filtrado que las filas, no con una consulta aparte: si se
+/// calculara por su lado, un día el bloque de la pantalla diría un número y la tabla otro.
+/// </summary>
+public record AspectoDelResumen(
+    string Criterio,
+    double Promedio,
+    int Cantidad);
+
 /// <summary>Hacia dónde va el promedio del restaurante.</summary>
 public record TendenciaDelRestaurante(
     // null sin base: "sin dato", no -100%.
@@ -98,7 +111,11 @@ public record ResumenCalificacionesRestaurantes(
     int RestaurantesTotales,
     int TotalCalificaciones,
     int CalificacionesHoy,
+    // Los tres deltas del diseño, calculados sobre el mismo conjunto filtrado que las filas.
+    VariacionesDelResumen Variaciones,
     DistribucionDeEstrellas Distribucion,
+    // El promedio por aspecto de TODO el filtro, no de la página.
+    List<AspectoDelResumen> Aspectos,
     // Para el gráfico.
     List<EvolucionDelPromedio> Evolucion,
     // ≥ 4.7.
@@ -106,6 +123,26 @@ public record ResumenCalificacionesRestaurantes(
     // ≤ 3.5.
     EnAlertaDelResumen EnAlerta,
     List<RestauranteDelTop> Top);
+
+/// <summary>
+/// Los tres deltas del diseño: el promedio y el total contra el período anterior, y las
+/// calificaciones de hoy contra las de ayer.
+///
+/// El período anterior es la MISMA ventana corrida hacia atrás su misma longitud: si el rango
+/// es del 1 al 30, el anterior es del 1 al 30 del mes previo.
+///
+/// Los tres viajan en <c>null</c> cuando no hay base para comparar, y ahí está lo importante:
+/// sin datos del período anterior un <c>0%</c> diría "no cambió nada" cuando en realidad no
+/// sabemos. Nada de <c>0</c> ni de <c>-100%</c>.
+/// </summary>
+public record VariacionesDelResumen(
+    // La diferencia del PROMEDIO, en puntos (0.3), no un porcentaje: el promedio va de 1 a 5
+    // y "subió 0.3" es lo que se lee; un porcentaje sería otra cuenta sobre el mismo dato.
+    double? PromedioVsPeriodoAnterior,
+    // La variación PORCENTUAL del total de calificaciones (15.7).
+    double? TotalVsPeriodoAnterior,
+    // La variación PORCENTUAL de las calificaciones de hoy contra las de ayer (12.1).
+    double? HoyVsAyer);
 
 /// <summary>
 /// El promedio de un día, que es un punto del gráfico de evolución.

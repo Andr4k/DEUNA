@@ -59,7 +59,7 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
         // Los aspectos y la tendencia se piden solo para la página: son los dos cruces por
         // fila y no hacen falta para las que no se van a mostrar.
         var aspectos = await ObtenerAspectosAsync(restauranteIds, filtro, cancellationToken);
-        var anteriores = await ObtenerPromediosAnterioresAsync(restauranteIds, filtro, cancellationToken);
+        var anteriores = await ObtenerAgregadosAnterioresAsync(restauranteIds, filtro, cancellationToken);
 
         var items = pagina
             .Select(fila => AFilaDeLaTabla(fila, aspectos, anteriores))
@@ -87,21 +87,40 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
         var totalCalificaciones = conjunto.Sum(f => f.Total);
         var sumaDePuntajes = conjunto.Sum(f => f.SumaDePuntajes);
 
+        // El promedio global pondera cada calificación, no promedia los promedios de los
+        // restaurantes: un restaurante con 40 encuestas pesa más que uno con una. Sin ninguna
+        // calificación en el rango viaja en null, no en 0: un promedio de cero y un promedio
+        // que no existe se ven igual en pantalla y significan cosas opuestas.
+        var promedioGlobal = totalCalificaciones == 0
+            ? (double?)null
+            : (double)sumaDePuntajes / totalCalificaciones;
+
         var restauranteIds = conjunto.Select(f => f.RestauranteId).ToList();
 
+        // Los aspectos y los deltas se leen de los MISMOS restaurantes que las filas —no del
+        // rango entero—: el filtro por zona, nombre o promedio también recorta los aspectos,
+        // así que el bloque de la pantalla no puede contar una cosa y la tabla otra.
+        var aspectos = await ObtenerAspectosAsync(restauranteIds, filtro, cancellationToken);
+        var anteriores = await ObtenerAgregadosAnterioresAsync(restauranteIds, filtro, cancellationToken);
+
+        var hoy = DateTime.UtcNow.Date;
+        var calificacionesHoy = await ContarEnDiaAsync(restauranteIds, hoy, filtro, cancellationToken);
+        var calificacionesAyer = await ContarEnDiaAsync(restauranteIds, hoy.AddDays(-1), filtro, cancellationToken);
+
         return new ResumenCalificacionesRestaurantes(
-            // El promedio global pondera cada calificación, no promedia los promedios de los
-            // restaurantes: un restaurante con 40 encuestas pesa más que uno con una. Sin
-            // ninguna calificación en el rango viaja en null, no en 0: un promedio de cero y
-            // un promedio que no existe se ven igual en pantalla y significan cosas opuestas.
-            PromedioGlobal: totalCalificaciones == 0
-                ? null
-                : (double)sumaDePuntajes / totalCalificaciones,
+            PromedioGlobal: promedioGlobal,
             RestaurantesCalificados: conjunto.Count,
             RestaurantesTotales: restaurantesTotales,
             TotalCalificaciones: totalCalificaciones,
-            CalificacionesHoy: await ContarHoyAsync(restauranteIds, filtro, cancellationToken),
+            CalificacionesHoy: calificacionesHoy,
+            Variaciones: VariacionesDe(
+                promedioGlobal,
+                totalCalificaciones,
+                anteriores.Values,
+                calificacionesHoy,
+                calificacionesAyer),
             Distribucion: SumarDistribuciones(conjunto),
+            Aspectos: AspectosDe(aspectos),
             Evolucion: await EvolucionAsync(restauranteIds, filtro, cancellationToken),
             Destacados: new DestacadosDelResumen(
                 Minimo: UmbralDestacado,
@@ -138,7 +157,7 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
 
         // Los dos cruces por fila se piden solo para este restaurante.
         var aspectos = await ObtenerAspectosAsync([restauranteId], filtro, cancellationToken);
-        var anteriores = await ObtenerPromediosAnterioresAsync([restauranteId], filtro, cancellationToken);
+        var anteriores = await ObtenerAgregadosAnterioresAsync([restauranteId], filtro, cancellationToken);
 
         return AFilaDeLaTabla(fila, aspectos, anteriores);
     }
@@ -150,7 +169,7 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
     private static CalificacionDeRestaurante AFilaDeLaTabla(
         FilaAgregada fila,
         Dictionary<Guid, List<AspectoCalificado>> aspectos,
-        Dictionary<Guid, double> anteriores)
+        Dictionary<Guid, AgregadoAnterior> anteriores)
         => new(
             RestauranteId: fila.RestauranteId,
             Nombre: fila.Nombre,
@@ -164,7 +183,7 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
             Aspectos: aspectos.TryGetValue(fila.RestauranteId, out var delRestaurante) ? delRestaurante : [],
             Tendencia: new TendenciaDelRestaurante(
                 anteriores.TryGetValue(fila.RestauranteId, out var anterior)
-                    ? Variacion(fila.Promedio, anterior)
+                    ? Variacion(fila.Promedio, anterior.Promedio)
                     : null),
             // Sin modelo de incidencias: el campo viaja para que la pantalla no cambie cuando
             // exista, y en null porque un 0 diría que no hubo ninguna.
@@ -330,10 +349,13 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
     }
 
     /// <summary>
-    /// El promedio de cada restaurante en el período anterior, que es el mismo rango corrido
+    /// El agregado de cada restaurante en el período anterior, que es el mismo rango corrido
     /// una longitud hacia atrás.
+    ///
+    /// Sirve para las dos lecturas que comparan: la tendencia de una fila —su promedio— y las
+    /// variaciones del resumen, que ponderan las sumas y los totales de todo el conjunto.
     /// </summary>
-    private async Task<Dictionary<Guid, double>> ObtenerPromediosAnterioresAsync(
+    private async Task<Dictionary<Guid, AgregadoAnterior>> ObtenerAgregadosAnterioresAsync(
         List<Guid> restauranteIds,
         FiltroCalificacionesRestaurantes filtro,
         CancellationToken cancellationToken)
@@ -361,16 +383,20 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
 
         return anteriores.ToDictionary(
             a => a.RestauranteId,
-            a => (double)a.Suma / a.Total);
+            a => new AgregadoAnterior(Total: a.Total, Suma: a.Suma));
     }
 
     /// <summary>
-    /// Las calificaciones de hoy, recortadas por la ventana: el KPI se calcula sobre el mismo
-    /// conjunto que las filas, así que una calificación de hoy fuera del rango pedido no
-    /// cuenta.
+    /// Las calificaciones de un día, recortadas por la ventana: los KPIs se calculan sobre el
+    /// mismo conjunto que las filas, así que una calificación fuera del rango pedido no cuenta.
+    ///
+    /// El día se recorta contra la ventana y no al revés: el día del borde entra a medias si la
+    /// ventana empieza o termina dentro de él. Los dos días que pide el resumen —hoy y ayer—
+    /// salen de acá, así que el "hoy" y su comparación no pueden medir con reglas distintas.
     /// </summary>
-    private async Task<int> ContarHoyAsync(
+    private async Task<int> ContarEnDiaAsync(
         List<Guid> restauranteIds,
+        DateTime inicioDelDia,
         FiltroCalificacionesRestaurantes filtro,
         CancellationToken cancellationToken)
     {
@@ -381,16 +407,15 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
 
         var (desde, hasta, _) = Ventanas(filtro);
 
-        var inicioDeHoy = DateTime.UtcNow.Date;
-        var desdeHoy = inicioDeHoy > desde ? inicioDeHoy : desde;
-        var hastaHoy = inicioDeHoy.AddDays(1);
+        var desdeDia = inicioDelDia > desde ? inicioDelDia : desde;
+        var hastaDia = inicioDelDia.AddDays(1);
 
-        if (hasta is { } extremo && extremo < hastaHoy)
+        if (hasta is { } extremo && extremo < hastaDia)
         {
-            hastaHoy = extremo;
+            hastaDia = extremo;
         }
 
-        if (desdeHoy >= hastaHoy)
+        if (desdeDia >= hastaDia)
         {
             return 0;
         }
@@ -399,8 +424,8 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
             .AsNoTracking()
             .CountAsync(
                 e => restauranteIds.Contains(e.RestauranteId)
-                     && e.CreatedAt >= desdeHoy
-                     && e.CreatedAt < hastaHoy,
+                     && e.CreatedAt >= desdeDia
+                     && e.CreatedAt < hastaDia,
                 cancellationToken);
     }
 
@@ -476,6 +501,61 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
     private static double? Variacion(double actual, double anterior)
         => anterior == 0 ? null : (actual - anterior) / anterior * 100;
 
+    /// <summary>
+    /// Los tres deltas del resumen, sobre el mismo conjunto filtrado que las filas.
+    ///
+    /// El promedio se compara en PUNTOS (la diferencia), porque el promedio va de 1 a 5 y lo
+    /// que se lee es "subió 0.3"; el total y las calificaciones de hoy, en porcentaje, porque
+    /// ahí lo que importa es cuánto cambió respecto de su base.
+    ///
+    /// Los tres viajan en <c>null</c> cuando no hay base, y no en <c>0</c>: sin datos del
+    /// período anterior no hay variación que calcular, y un <c>0%</c> diría que no cambió nada
+    /// cuando en realidad no sabemos. El promedio necesita las dos puntas —el actual y el
+    /// anterior—porque comparar contra un período vacío devolvería el promedio actual como si
+    /// fuera una variación de sí mismo.
+    /// </summary>
+    private static VariacionesDelResumen VariacionesDe(
+        double? promedioGlobal,
+        int totalCalificaciones,
+        IEnumerable<AgregadoAnterior> anteriores,
+        int hoy,
+        int ayer)
+    {
+        var totalAnterior = anteriores.Sum(a => a.Total);
+        var sumaAnterior = anteriores.Sum(a => a.Suma);
+
+        // El promedio anterior se pondera igual que el actual: sumas sobre totales, no el
+        // promedio de los promedios de los restaurantes.
+        var promedioAnterior = totalAnterior == 0 ? (double?)null : (double)sumaAnterior / totalAnterior;
+
+        return new VariacionesDelResumen(
+            PromedioVsPeriodoAnterior: promedioGlobal is { } actual && promedioAnterior is { } previo
+                ? actual - previo
+                : null,
+            TotalVsPeriodoAnterior: Variacion(totalCalificaciones, totalAnterior),
+            HoyVsAyer: Variacion(hoy, ayer));
+    }
+
+    /// <summary>
+    /// Los aspectos de todo el conjunto filtrado, ya agregados por criterio.
+    ///
+    /// El promedio se pondera por cantidad —un criterio con 300 calificaciones no puede pesar
+    /// lo mismo que uno con 2— y el orden es por cantidad descendente: lo que más se calificó
+    /// va arriba, que es el orden en que la pantalla lo muestra.
+    /// </summary>
+    private static List<AspectoDelResumen> AspectosDe(
+        Dictionary<Guid, List<AspectoCalificado>> porRestaurante)
+        => porRestaurante.Values
+            .SelectMany(delRestaurante => delRestaurante)
+            .GroupBy(a => a.Criterio, StringComparer.Ordinal)
+            .Select(grupo => new AspectoDelResumen(
+                Criterio: grupo.Key,
+                Promedio: (double)grupo.Sum(a => a.Promedio * a.Cantidad) / grupo.Sum(a => a.Cantidad),
+                Cantidad: grupo.Sum(a => a.Cantidad)))
+            .OrderByDescending(a => a.Cantidad)
+            .ThenBy(a => a.Criterio, StringComparer.Ordinal)
+            .ToList();
+
     private static DistribucionDeEstrellas SumarDistribuciones(IEnumerable<FilaAgregada> filas)
     {
         var cinco = 0;
@@ -510,4 +590,17 @@ public class CalificacionesRestaurantesService : ICalificacionesRestaurantesServ
         int SumaDePuntajes,
         double Promedio,
         DistribucionDeEstrellas Distribucion);
+
+    /// <summary>
+    /// El agregado de un restaurante en el período anterior.
+    ///
+    /// Se guardan la suma y el total —no solo el promedio— por el mismo motivo que en
+    /// <see cref="FilaAgregada"/>: el promedio del período anterior que compara el resumen se
+    /// pondera con los dos números, sin promediar promedios.
+    /// </summary>
+    private record AgregadoAnterior(int Total, int Suma)
+    {
+        /// <summary>El promedio del período, con el mismo cálculo que la fila actual.</summary>
+        public double Promedio => (double)Suma / Total;
+    }
 }
