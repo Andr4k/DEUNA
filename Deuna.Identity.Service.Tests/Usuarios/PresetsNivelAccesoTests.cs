@@ -20,7 +20,7 @@ public class PresetsNivelAccesoTests
     public void Derivar_ConExactamenteLosPermisosDeUnPreset_DevuelveSuEtiqueta(string nombreDelPreset)
     {
         var preset = PresetsNivelAcceso.Todos.Single(p => p.Nombre == nombreDelPreset);
-        var permisos = preset.Permisos.Select(APermiso).ToList();
+        var permisos = preset.Permisos.Select(clave => APermiso(clave)).ToList();
 
         var nivel = PresetsNivelAcceso.Derivar(permisos, Ahora);
 
@@ -90,7 +90,7 @@ public class PresetsNivelAccesoTests
     }
 
     private static IEnumerable<PermisoUsuario> PermisosDe(string nombreDelPreset) =>
-        PresetsNivelAcceso.Todos.Single(p => p.Nombre == nombreDelPreset).Permisos.Select(APermiso);
+        PresetsNivelAcceso.Todos.Single(p => p.Nombre == nombreDelPreset).Permisos.Select(clave => APermiso(clave));
 
     private static PermisoUsuario APermiso(
         string clave,
