@@ -48,6 +48,26 @@ public class ProteccionPorPermisoTests : IClassFixture<TestWebApplicationFactory
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    /// <summary>
+    /// La otra mitad del 403: la fila del permiso EXISTE pero esta revocada. Sin este caso
+    /// el 403 podria venir solo de que la fila no esta —como en el primer test— y apagar el
+    /// flag de concesion no cambiaria nada: la revocacion quedaria sin cubrir.
+    /// </summary>
+    [Fact]
+    public async Task Listado_ConElPermisoRevocado_Devuelve403()
+    {
+        var admin = await CrearAdministradorAsync(
+            superAdmin: false,
+            concederLecturaDeUsuarios: true,
+            concedido: false);
+
+        using var cliente = ClienteDe(admin);
+        var response = await cliente.GetAsync(Listado);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "una fila con Concedido=false es un permiso revocado y no concede nada");
+    }
+
     [Fact]
     public async Task Listado_ConElPermisoVencido_Devuelve403()
     {
@@ -102,11 +122,13 @@ public class ProteccionPorPermisoTests : IClassFixture<TestWebApplicationFactory
 
     /// <summary>
     /// Crea un administrador en la base del test. El permiso se escribe como fila concreta:
-    /// es lo que la verificación mira, no el rol.
+    /// es lo que la verificación mira, no el rol. `concedido` permite escribir la fila
+    /// revocada, que es un caso distinto al de no tener fila.
     /// </summary>
     private async Task<Guid> CrearAdministradorAsync(
         bool superAdmin,
         bool concederLecturaDeUsuarios = false,
+        bool concedido = true,
         DateTime? vencimiento = null)
     {
         using var scope = _factory.Services.CreateScope();
@@ -136,7 +158,7 @@ public class ProteccionPorPermisoTests : IClassFixture<TestWebApplicationFactory
                 Permiso = TipoPermiso.GESTION_USUARIOS,
                 Recurso = CatalogoRecursos.ClaveUsuarios,
                 Accion = CatalogoRecursos.AccionLeer,
-                Concedido = true,
+                Concedido = concedido,
                 FechaFin = vencimiento
             });
         }
