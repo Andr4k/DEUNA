@@ -25,7 +25,11 @@ public static class UsuariosAdminEndpoints
 
         grupo.MapGet("/usuarios", ListarAsync)
             .WithName("ListarUsuariosPortal")
-            .WithSummary("Listar los usuarios del portal con sus zonas, su nivel de acceso y su último acceso");
+            .WithSummary("Listar los usuarios del portal con sus zonas, su nivel de acceso y su último acceso")
+            // El permiso por recurso y acción: la segunda mitad de lo que promete el
+            // comentario de la clase. Un token válido con rol ADMIN pero sin `usuarios:READ`
+            // concedido no pasa.
+            .RequierePermiso(CatalogoRecursos.ClaveUsuarios, CatalogoRecursos.AccionLeer);
 
         return app;
     }
