@@ -36,6 +36,7 @@ public class RestauranteRegistradoConsumer : IConsumer<RestauranteRegistrado>
         {
             // Reenvío o actualización del perfil: se refresca el nombre, sin duplicar.
             existente.NombreComercial = evento.NombreComercial;
+            existente.Ciudad = evento.Ciudad;
             existente.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync(context.CancellationToken);
@@ -48,6 +49,7 @@ public class RestauranteRegistradoConsumer : IConsumer<RestauranteRegistrado>
         {
             Id = evento.RestauranteId,
             NombreComercial = evento.NombreComercial,
+            Ciudad = evento.Ciudad,
             Activo = true,
             CreatedAt = evento.OccurredAt == default ? DateTime.UtcNow : evento.OccurredAt
         });

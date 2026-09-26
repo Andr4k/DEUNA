@@ -81,6 +81,7 @@ public class FeedbackDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.NombreComercial).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Ciudad).IsRequired().HasMaxLength(100);
             entity.Property(e => e.CreatedAt).IsRequired();
 
             entity.HasIndex(e => e.Activo);

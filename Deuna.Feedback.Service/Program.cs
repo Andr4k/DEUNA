@@ -72,6 +72,7 @@ builder.Services.AddMassTransit(x =>
 
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
+builder.Services.AddScoped<ICalificacionesRestaurantesService, CalificacionesRestaurantesService>();
 
 // El enlace que se comparte apunta al dominio real de cada ambiente.
 builder.Services.Configure<FeedbackOptions>(builder.Configuration.GetSection(FeedbackOptions.SectionName));
