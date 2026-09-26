@@ -44,6 +44,9 @@ public class Usuario
 
     // Refresh tokens
     public List<RefreshToken> RefreshTokens { get; set; } = new();
+
+    // Permisos del usuario en el portal (por recurso y acción)
+    public List<PermisoUsuario> Permisos { get; set; } = new();
 }
 
 public enum TipoDocumentoIdentidad
