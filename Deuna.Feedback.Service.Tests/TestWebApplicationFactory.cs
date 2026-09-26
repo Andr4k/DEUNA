@@ -1,5 +1,8 @@
+using Deuna.Feedback.Service.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Deuna.Feedback.Service.Tests;
 
@@ -7,13 +10,17 @@ namespace Deuna.Feedback.Service.Tests;
 /// Arranca Feedback Service con EF InMemory y transporte InMemory de MassTransit,
 /// sin depender de PostgreSQL ni RabbitMQ.
 ///
-/// Se usan variables de entorno (no ConfigureAppConfiguration) porque Program.cs lee
-/// "UseInMemoryDatabase" en las sentencias de nivel superior, antes de que
-/// WebApplicationFactory aplique su colección de configuración.
+/// Las banderas que Program.cs lee en las sentencias de nivel superior van por variables de
+/// entorno (no ConfigureAppConfiguration): la configuración del builder ya está armada cuando
+/// WebApplicationFactory puede intervenir.
 ///
-/// Cada instancia usa un nombre de BD InMemory único: el store se comparte por nombre
-/// en todo el proceso, así que un nombre fijo hacía que los tests se pisaran entre sí
-/// (se observó un fallo intermitente antes de aislarlo).
+/// Cada instancia usa un nombre de BD InMemory único, y ese nombre NO puede ir por variable de
+/// entorno: la variable es del proceso y el host se construye de forma diferida, así que dos
+/// factories en paralelo se pisaban el nombre —y el Dispose de una borraba el de la otra— y las
+/// dos terminaban sobre la MISMA base. Con la base compartida, los tests que cuentan filas
+/// (calificaciones, restaurantes) veían datos de la otra clase y fallaban por contaminación,
+/// no por lógica. El nombre va por instancia en ConfigureServices, que corre después de las
+/// registraciones de Program y no depende del orden en que los tests construyan su host.
 /// </summary>
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
@@ -21,26 +28,37 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     public TestWebApplicationFactory()
     {
+        // Estas tres son iguales para toda factory: no hay carrera entre ellas.
         Environment.SetEnvironmentVariable("UseInMemoryDatabase", "true");
         Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", "InMemory");
-        Environment.SetEnvironmentVariable("InMemoryDatabaseName", _inMemoryDatabaseName);
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Testing");
+        // El panel de calificaciones valida JWT: el servicio tiene que leer la misma clave con la
+        // que los tests firman sus tokens. Iguales para toda factory, así que no hay carrera.
+        Environment.SetEnvironmentVariable("Jwt__SecretKey", TestJwt.SecretKey);
+        Environment.SetEnvironmentVariable("Jwt__Issuer", TestJwt.Issuer);
+        Environment.SetEnvironmentVariable("Jwt__Audience", TestJwt.Audience);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-    }
 
-    protected override void Dispose(bool disposing)
-    {
-        base.Dispose(disposing);
-
-        if (disposing)
+        // Program.cs registra el DbContext leyendo "InMemoryDatabaseName" de su configuración,
+        // que ya está armada cuando el factory puede intervenir. Reemplazar la registración acá
+        // es lo que fija el nombre por instancia sin carrera.
+        builder.ConfigureServices(services =>
         {
-            Environment.SetEnvironmentVariable("UseInMemoryDatabase", null);
-            Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", null);
-            Environment.SetEnvironmentVariable("InMemoryDatabaseName", null);
-        }
+            var registradas = services
+                .Where(d => d.ServiceType == typeof(DbContextOptions<FeedbackDbContext>))
+                .ToList();
+
+            foreach (var registrada in registradas)
+            {
+                services.Remove(registrada);
+            }
+
+            services.AddDbContext<FeedbackDbContext>(options =>
+                options.UseInMemoryDatabase(_inMemoryDatabaseName));
+        });
     }
 }

@@ -52,6 +52,13 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<RestauranteRegistradoConsumer>();
     // Cierra el pedido cuando Delivery confirma la entrega (TASK-305).
     x.AddConsumer<PedidoEntregadoConsumer>();
+    // Mantiene el estado del pedido al día con el ciclo de entrega (TASK-308).
+    x.AddConsumer<PedidoAsignadoConsumer>();
+    x.AddConsumer<PedidoActualizadoConsumer>();
+    // Réplica del domiciliario: el nombre que muestra el historial de servicios finalizados.
+    x.AddConsumer<RepartidorRegistradoConsumer>();
+    // Calificación del pedido: las dos notas que muestra el historial de servicios finalizados.
+    x.AddConsumer<CalificacionRegistradaConsumer>();
 
     if (useInMemoryMessaging)
     {
@@ -80,6 +87,10 @@ builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
 builder.Services.AddScoped<IPedidoService, PedidoService>();
 builder.Services.AddScoped<ITarifaService, TarifaService>();
 builder.Services.AddScoped<IGeoService, GeoService>();
+
+// Parámetros del panel de pedidos (rangos de prioridad, umbral de "no responde").
+// En configuración desde el primer commit: son decisiones de negocio, no constantes.
+builder.Services.Configure<OrdersOptions>(builder.Configuration.GetSection(OrdersOptions.Seccion));
 
 // Register Validators
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
@@ -124,6 +135,9 @@ app.MapGet("/api/orders/health", () => Results.Ok(new { status = "healthy", serv
 
 // Map Orders Endpoints
 app.MapOrdersEndpoints();
+
+// Panel del administrador (grupo propio con política "admin")
+app.MapAdminOrdersEndpoints();
 
 // Auto-migrate database
 using (var scope = app.Services.CreateScope())

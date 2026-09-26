@@ -64,6 +64,14 @@ public record CrearPedidoResponse(
 );
 
 /// <summary>
+/// Cancelación de un pedido desde el restaurante. El pedido va en la ruta; acá solo viaja
+/// el motivo, que es lo que el cliente y el domiciliario necesitan saber.
+/// </summary>
+public record CancelarPedidoRequest(
+    [Required, MaxLength(300)] string Motivo
+);
+
+/// <summary>
 /// Response completo de un pedido
 /// </summary>
 public record PedidoResponse(
@@ -146,3 +154,49 @@ public record TarifaAplicadaResponse(
     string? DetalleCalculo,
     decimal TotalCalculado
 );
+
+/// <summary>
+/// Filtros del listado de pedidos sin asignar. Llegan por query string; todos son
+/// opcionales salvo la paginación, que tiene valores por defecto.
+/// </summary>
+public record FiltroPedidosSinAsignar(
+    string? Zona,
+    string? Prioridad,
+    int? EsperaMin,
+    bool IncluirSinRespuesta,
+    int Pagina,
+    int Tamano);
+
+/// <summary>
+/// Un pedido sin asignar, tal como lo muestra la lista del administrador.
+/// El nombre del domiciliario no está acá: Orders no tiene la réplica de repartidores
+/// (viven en Delivery), así que en la lista se muestra el pedido y su antigüedad.
+/// </summary>
+public record PedidoSinAsignarItem(
+    Guid PedidoId,
+    string Codigo,
+    string Restaurante,
+    string RecogerEn,
+    string EntregarEn,
+    DateTime GeneradoEn,
+    int MinutosEsperando,
+    string Prioridad,
+    decimal ValorDomicilio,
+    string Zona,
+    /// <summary>
+    /// Estado del pedido. Hoy siempre es <c>Buscando</c>, pero cuando el umbral de
+    /// "no responde" se encienda la lista va a mezclar los que nunca se asignaron con los
+    /// que quedaron en manos de alguien que no contesta, y el operador tiene que poder
+    /// distinguirlos para saber qué está resolviendo.
+    /// </summary>
+    string Estado);
+
+/// <summary>
+/// Página del listado: los items de la página y el total completo de la lista (no el de
+/// la página), que es lo que necesita el portal para saber cuántas páginas hay.
+/// </summary>
+public record ListaPedidosSinAsignarResponse(
+    List<PedidoSinAsignarItem> Items,
+    int Total,
+    int Pagina,
+    int Tamano);

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Deuna.Shared.Domain;
 
 namespace Deuna.Delivery.Service.Models;
 
@@ -69,12 +70,14 @@ public class PedidoDisponible
 
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
 
-    public const string EstadoBuscando = "Buscando";
-    public const string EstadoAsignado = "Asignado";
-    public const string EstadoConfirmadoEnLocal = "ConfirmadoEnLocal";
-    public const string EstadoEnRuta = "EnRuta";
-    public const string EstadoEntregado = "Entregado";
-    public const string EstadoCancelado = "Cancelado";
+    // Los literales viven en Deuna.Shared: los estados viajan como texto dentro de los
+    // eventos, así que tienen que ser idénticos en todos los servicios.
+    public const string EstadoBuscando = EstadosPedido.Buscando;
+    public const string EstadoAsignado = EstadosPedido.Asignado;
+    public const string EstadoConfirmadoEnLocal = EstadosPedido.ConfirmadoEnLocal;
+    public const string EstadoEnRuta = EstadosPedido.EnRuta;
+    public const string EstadoEntregado = EstadosPedido.Entregado;
+    public const string EstadoCancelado = EstadosPedido.Cancelado;
 
     /// <summary>
     /// Estados en los que el repartidor está ocupado con este pedido. La asignación

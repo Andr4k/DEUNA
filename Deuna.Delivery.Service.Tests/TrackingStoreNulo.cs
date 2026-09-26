@@ -24,6 +24,9 @@ internal sealed class TrackingStoreNulo : ITrackingStore
     public Task<IReadOnlyList<UbicacionGps>> BuscarCandidatosAsync(double latitud, double longitud, double radioKm, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<UbicacionGps>>([]);
 
+    public Task<IReadOnlyList<UbicacionGps>> ObtenerTodasAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<UbicacionGps>>([]);
+
     public Task EliminarAsync(Guid riderId, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 }

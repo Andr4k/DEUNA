@@ -2,6 +2,7 @@ using Deuna.Feedback.Service.Consumers;
 using Deuna.Feedback.Service.Endpoints;
 using Deuna.Feedback.Service.Models;
 using Deuna.Feedback.Service.Services;
+using Deuna.Shared.Extensions;
 using Deuna.Shared.Messaging;
 using FluentValidation;
 using MassTransit;
@@ -46,6 +47,8 @@ builder.Services.AddMassTransit(x =>
     // Evento terminal: es el que habilita la encuesta (TASK-305).
     x.AddConsumer<PedidoEntregadoConsumer>();
     x.AddConsumer<RepartidorRegistradoConsumer>();
+    // Réplica de restaurantes: el mensaje viral nombra al restaurante (TASK-402).
+    x.AddConsumer<RestauranteRegistradoConsumer>();
 
     if (useInMemory)
     {
@@ -66,8 +69,15 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
+// Use shared JWT authentication
+builder.Services.AddDeunaJwtAuthentication(builder.Configuration);
+
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
+builder.Services.AddScoped<ICalificacionesRestaurantesService, CalificacionesRestaurantesService>();
+
+// El enlace que se comparte apunta al dominio real de cada ambiente.
+builder.Services.Configure<FeedbackOptions>(builder.Configuration.GetSection(FeedbackOptions.SectionName));
 
 ConfigureHealthChecks(builder.Services, builder.Configuration, useInMemory);
 
@@ -84,6 +94,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging();
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Middleware compartido de JWT, después de UseAuthentication/UseAuthorization (igual que Orders).
+app.UseDeunaJwtMiddleware();
 
 app.MapHealthChecks("/health");
 
@@ -93,6 +108,9 @@ app.MapGet("/api/feedback/health", () => Results.Ok(new { status = "healthy", se
 
 // Feedback Nivel 1 (TASK-401)
 app.MapFeedbackEndpoints();
+
+// Panel del administrador (grupo propio con política "admin")
+app.MapAdminFeedbackEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {

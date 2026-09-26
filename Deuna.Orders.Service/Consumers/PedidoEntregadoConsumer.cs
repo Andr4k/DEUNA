@@ -1,4 +1,5 @@
 using Deuna.Orders.Service.Models;
+using Deuna.Shared.Domain;
 using Deuna.Shared.Events;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ namespace Deuna.Orders.Service.Consumers;
 public class PedidoEntregadoConsumer : IConsumer<PedidoEntregado>
 {
     /// <summary>Estado terminal del pedido.</summary>
-    public const string EstadoEntregado = "Entregado";
+    public const string EstadoEntregado = EstadosPedido.Entregado;
 
     private readonly OrdersDbContext _db;
     private readonly ILogger<PedidoEntregadoConsumer> _logger;
@@ -40,12 +41,24 @@ public class PedidoEntregadoConsumer : IConsumer<PedidoEntregado>
             return;
         }
 
+        // Cierra el intento vigente: es el domiciliario que efectivamente entregó.
+        var asignacion = await AsignacionesDelPedido.VigenteAsync(
+            _db, evento.PedidoId, context.CancellationToken);
+
+        if (asignacion is not null)
+        {
+            asignacion.FechaEntrega ??= evento.FechaEntrega;
+            asignacion.EstadoAsignacion = AsignacionReplicada.EstadoCompletado;
+        }
+
         // Idempotente: una reentrega del mensaje no puede reescribir la fecha de entrega.
         if (pedido.Estado == EstadoEntregado)
         {
             _logger.LogInformation(
                 "El pedido {Codigo} ya estaba marcado como entregado: no se reescribe la fecha",
                 pedido.Codigo);
+
+            await _db.SaveChangesAsync(context.CancellationToken);
             return;
         }
 

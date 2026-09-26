@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Deuna.Orders.Service;
 using Deuna.Orders.Service.DTOs;
 using Deuna.Orders.Service.Models;
+using Deuna.Shared.Domain;
 using Deuna.Shared.Events;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -75,7 +76,7 @@ public class EventPublishingTests : IClassFixture<TestWebApplicationFactory>
         
         pedido.Should().NotBeNull();
         pedido!.Codigo.Should().StartWith("PED-");
-        pedido.Estado.Should().Be("Pendiente");
+        pedido.Estado.Should().Be(EstadosPedido.Buscando);
         pedido.Total.Should().BeGreaterThan(0);
     }
 

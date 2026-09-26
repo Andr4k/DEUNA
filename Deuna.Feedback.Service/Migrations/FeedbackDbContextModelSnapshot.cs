@@ -22,6 +22,53 @@ namespace Deuna.Feedback.Service.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Deuna.Feedback.Service.Models.FeedbackComentarioFoto", b =>
+                {
+                    b.Property<Guid>("EncuestaId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ComentarioTexto")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("UrlFotoEvidencia")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("EncuestaId");
+
+                    b.ToTable("feedback_comentarios_fotos");
+                });
+
+            modelBuilder.Entity("Deuna.Feedback.Service.Models.FeedbackDetalleCriterio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Criterio")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("EncuestaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Puntaje")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EncuestaId", "Criterio")
+                        .IsUnique();
+
+                    b.ToTable("feedback_detalle_criterios", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_feedback_detalle_criterios_puntaje", "\"Puntaje\" BETWEEN 1 AND 5");
+                        });
+                });
+
             modelBuilder.Entity("Deuna.Feedback.Service.Models.FeedbackEncuesta", b =>
                 {
                     b.Property<Guid>("Id")
@@ -64,6 +111,33 @@ namespace Deuna.Feedback.Service.Migrations
 
                             t.HasCheckConstraint("CK_feedback_encuestas_rating_repartidor", "\"RatingServicioRepartidor\" BETWEEN 1 AND 5");
                         });
+                });
+
+            modelBuilder.Entity("Deuna.Feedback.Service.Models.FeedbackViralWhatsApp", b =>
+                {
+                    b.Property<Guid>("EncuestaId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CodigoCompartido")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<DateTime?>("FechaCompartido")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("FueCompartido")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("EncuestaId");
+
+                    b.HasIndex("CodigoCompartido")
+                        .IsUnique();
+
+                    b.HasIndex("FueCompartido");
+
+                    b.ToTable("feedback_viral_whatsapp");
                 });
 
             modelBuilder.Entity("Deuna.Feedback.Service.Models.PedidoReplicado", b =>
@@ -156,6 +230,38 @@ namespace Deuna.Feedback.Service.Migrations
                     b.HasIndex("Activo");
 
                     b.ToTable("repartidores_replicados");
+                });
+
+            modelBuilder.Entity("Deuna.Feedback.Service.Models.RestauranteReplicado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Ciudad")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NombreComercial")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Activo");
+
+                    b.ToTable("restaurantes_replicados");
                 });
 #pragma warning restore 612, 618
         }

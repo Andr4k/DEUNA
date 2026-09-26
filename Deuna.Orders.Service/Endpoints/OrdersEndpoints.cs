@@ -46,7 +46,55 @@ public static class OrdersEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        group.MapPost("/{pedidoId:guid}/cancelar", CancelarPedidoAsync)
+            .WithName("CancelarPedido")
+            .WithSummary("Cancelar un pedido (solo antes de confirmarlo en el local)")
+            .Produces<PedidoResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
+    }
+
+    private static async Task<IResult> CancelarPedidoAsync(
+        Guid pedidoId,
+        [FromBody] CancelarPedidoRequest request,
+        [FromServices] IPedidoService pedidoService,
+        [FromServices] IValidator<CancelarPedidoRequest> validator,
+        HttpContext httpContext)
+    {
+        var validation = await validator.ValidateAsync(request);
+        if (!validation.IsValid)
+        {
+            return Results.BadRequest(new
+            {
+                Success = false,
+                Message = "Datos inválidos",
+                Errors = validation.Errors.Select(e => e.ErrorMessage)
+            });
+        }
+
+        try
+        {
+            var pedido = await pedidoService.CancelarPedidoAsync(pedidoId, request.Motivo, httpContext);
+
+            if (pedido is null)
+            {
+                return Results.NotFound(new { Success = false, Message = "Pedido no encontrado" });
+            }
+
+            return Results.Ok(pedido);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Results.Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { Success = false, Message = ex.Message });
+        }
     }
 
     private static async Task<IResult> CrearPedidoAsync(

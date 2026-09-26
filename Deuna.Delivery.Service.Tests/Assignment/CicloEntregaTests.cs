@@ -176,6 +176,32 @@ public class CicloEntregaTests : IDisposable
     // --------------------------------------------------------------- cierre por QR
 
     [Fact]
+    public async Task RechazarSinOtroDomiciliario_RegistraElRechazoIgual()
+    {
+        // Sin telemetría de nadie no hay a quién reasignar, pero el rechazo se registró: la
+        // API no puede responder que falló cuando el pedido efectivamente volvió a búsqueda.
+        var pedido = await CrearPedidoAsync(PedidoDisponible.EstadoAsignado, RepartidorId);
+
+        var resultado = await CrearServicio().RechazarAsync(pedido.PedidoId, RepartidorId, "no puedo atenderlo");
+
+        resultado.RechazoRegistrado.Should().BeTrue();
+        resultado.Asignado.Should().BeFalse("no había otro domiciliario en el radio");
+
+        (await _db.PedidosDisponibles.SingleAsync()).Estado.Should().Be(PedidoDisponible.EstadoBuscando);
+    }
+
+    [Fact]
+    public async Task RechazarUnPedidoAjeno_NoRegistraNada()
+    {
+        var pedido = await CrearPedidoAsync(PedidoDisponible.EstadoAsignado, RepartidorId);
+
+        var resultado = await CrearServicio().RechazarAsync(pedido.PedidoId, OtroRepartidorId, "no es mío");
+
+        resultado.RechazoRegistrado.Should().BeFalse();
+        (await _db.PedidosDisponibles.SingleAsync()).Estado.Should().Be(PedidoDisponible.EstadoAsignado);
+    }
+
+    [Fact]
     public async Task CerrarEntrega_MarcaEntregadoPublicaElEventoYRegistraLaFecha()
     {
         var pedido = await CrearPedidoAsync(PedidoDisponible.EstadoEnRuta, RepartidorId);

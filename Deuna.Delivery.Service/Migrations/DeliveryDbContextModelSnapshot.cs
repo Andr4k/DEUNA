@@ -248,6 +248,43 @@ namespace Deuna.Delivery.Service.Migrations
                     b.ToTable("repartidores_replicados");
                 });
 
+            modelBuilder.Entity("Deuna.Delivery.Service.Models.RestauranteReplicado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Ciudad")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DireccionSede")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("NombreComercial")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Activo");
+
+                    b.ToTable("restaurantes_replicados");
+                });
+
             modelBuilder.Entity("Deuna.Delivery.Service.Models.Delivery", b =>
                 {
                     b.OwnsOne("Deuna.Delivery.Service.Models.Address", "DropoffAddress", b1 =>

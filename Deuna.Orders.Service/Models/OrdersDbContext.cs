@@ -16,6 +16,9 @@ public class OrdersDbContext : DbContext
     public DbSet<RestauranteReplicado> RestaurantesReplicados => Set<RestauranteReplicado>();
     public DbSet<ZonaCoberturaReplicada> ZonasCoberturaReplicadas => Set<ZonaCoberturaReplicada>();
     public DbSet<HorarioAtencionReplicado> HorariosAtencionReplicados => Set<HorarioAtencionReplicado>();
+    public DbSet<AsignacionReplicada> AsignacionesReplicadas => Set<AsignacionReplicada>();
+    public DbSet<RepartidorReplicado> RepartidoresReplicados => Set<RepartidorReplicado>();
+    public DbSet<CalificacionReplicada> CalificacionesReplicadas => Set<CalificacionReplicada>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -197,6 +200,53 @@ public class OrdersDbContext : DbContext
             entity.Property(e => e.Cerrado).IsRequired();
 
             entity.HasIndex(e => e.RestauranteReplicadoId);
+        });
+
+        // AsignacionReplicada: historial de intentos de entrega de un pedido (1:N)
+        modelBuilder.Entity<AsignacionReplicada>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PedidoId).IsRequired();
+            entity.Property(e => e.RepartidorId).IsRequired();
+            entity.Property(e => e.FechaAsignacion).IsRequired();
+            entity.Property(e => e.EstadoAsignacion).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.MotivoRechazo).HasMaxLength(300);
+
+            // Idempotencia: una reentrega del evento trae el mismo OccurredAt, así que el
+            // intento no se duplica. Un mismo domiciliario sí puede volver a recibir el
+            // pedido más adelante (tras un rechazo y un reintento), y eso es otro intento
+            // con otra hora.
+            entity.HasIndex(e => new { e.PedidoId, e.RepartidorId, e.FechaAsignacion }).IsUnique();
+            entity.HasIndex(e => e.PedidoId);
+        });
+
+        // RepartidorReplicado: quién es el domiciliario asignado. El cruce con la asignación
+        // es por RepartidorId, así que no lleva clave foránea a propósito: los dos eventos
+        // viajan por colas distintas y la asignación puede llegar antes que el perfil, y una
+        // FK obligaría a un orden que el flujo no garantiza.
+        modelBuilder.Entity<RepartidorReplicado>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.NombreCompleto).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.DocumentoIdentidad).HasMaxLength(50);
+            entity.Property(e => e.CiudadOperacion).HasMaxLength(100);
+            entity.Property(e => e.FotoPerfilUrl).HasMaxLength(500);
+            entity.Property(e => e.Activo).IsRequired();
+            entity.Property(e => e.CreatedAt).IsRequired();
+        });
+
+        // CalificacionReplicada: la nota del pedido, 1:1. El índice único sobre PedidoId es
+        // la idempotencia del consumidor: una reentrega del evento no duplica la fila.
+        modelBuilder.Entity<CalificacionReplicada>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PedidoId).IsRequired();
+            entity.Property(e => e.CalificacionDomiciliario).IsRequired();
+            entity.Property(e => e.CalificacionRestaurante).IsRequired();
+            entity.Property(e => e.FechaCalificacion).IsRequired();
+
+            entity.HasIndex(e => e.PedidoId).IsUnique();
+            entity.HasIndex(e => e.RepartidorId);
         });
     }
 }

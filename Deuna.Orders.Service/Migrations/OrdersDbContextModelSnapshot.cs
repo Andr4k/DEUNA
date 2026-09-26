@@ -24,6 +24,80 @@ namespace Deuna.Orders.Service.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Deuna.Orders.Service.Models.AsignacionReplicada", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EstadoAsignacion")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("FechaAsignacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaEntrega")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaLlegadaLocal")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaSalidaRuta")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MotivoRechazo")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("PedidoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RepartidorId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PedidoId");
+
+                    b.HasIndex("PedidoId", "RepartidorId", "FechaAsignacion")
+                        .IsUnique();
+
+                    b.ToTable("pedidos_asignados_repartidor");
+                });
+
+            modelBuilder.Entity("Deuna.Orders.Service.Models.CalificacionReplicada", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CalificacionDomiciliario")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CalificacionRestaurante")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaCalificacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PedidoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RepartidorId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PedidoId")
+                        .IsUnique();
+
+                    b.HasIndex("RepartidorId");
+
+                    b.ToTable("calificaciones_replicadas");
+                });
+
             modelBuilder.Entity("Deuna.Orders.Service.Models.ContactoPedido", b =>
                 {
                     b.Property<Guid>("Id")
@@ -261,6 +335,43 @@ namespace Deuna.Orders.Service.Migrations
                     b.HasIndex("RestauranteId");
 
                     b.ToTable("pedidos");
+                });
+
+            modelBuilder.Entity("Deuna.Orders.Service.Models.RepartidorReplicado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CiudadOperacion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DocumentoIdentidad")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("FotoPerfilUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("NombreCompleto")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("repartidores_replicados");
                 });
 
             modelBuilder.Entity("Deuna.Orders.Service.Models.RestauranteReplicado", b =>

@@ -63,11 +63,19 @@ public static class AssignmentEndpoints
             var resultado = await asignacion.RechazarAsync(
                 orderId, repartidorId.Value, request?.Motivo, cancellationToken);
 
-            // El servicio verifica que el pedido sea de este repartidor: un 400 aquí también
-            // cubre el intento de rechazar un pedido ajeno.
-            return resultado.Asignado || resultado.RepartidorId is not null
-                ? Results.Ok(new { message = resultado.Mensaje, reasignado = resultado.Asignado, repartidorId = resultado.RepartidorId })
-                : Results.BadRequest(new { message = resultado.Mensaje });
+            // El rechazo puede registrarse sin que haya a quién reasignar: eso no es un fallo
+            // de la petición. Solo se responde 400 cuando el rechazo en sí no aplicaba.
+            if (!resultado.RechazoRegistrado)
+            {
+                return Results.BadRequest(new { message = resultado.Mensaje });
+            }
+
+            return Results.Ok(new
+            {
+                message = resultado.Mensaje,
+                reasignado = resultado.Asignado,
+                repartidorId = resultado.RepartidorId
+            });
         })
         .RequireAuthorization("rider")
         .WithName("RejectOrder")

@@ -39,18 +39,26 @@ public record PedidoCreado(
 );
 
 /// <summary>
-/// Publicado cuando cambia el estado de un pedido. Contrato v1.
+/// Publicado cuando cambia el estado de un pedido. Contrato v2.
 ///
-/// Lo publican dos servicios: Orders (transiciones del pedido) y Delivery (el paso a
-/// <c>EnRuta</c> del ciclo de entrega, TASK-305). Consumido por Feedback para mantener su
-/// proyección al día.
+/// Lo publica **Delivery** con las transiciones del ciclo de entrega:
+/// <c>ConfirmadoEnLocal</c> al validar el QR del local, <c>EnRuta</c> al iniciar la entrega y
+/// <c>Buscando</c> cuando el domiciliario rechaza antes de llegar al local. Orders lo consume
+/// para replicar el estado y no quedarse mostrando el pedido como recién creado; Feedback, para
+/// mantener su proyección al día. Orders **no** lo publica: solo cambia el estado como reacción
+/// a estos eventos, y republicarlo sería devolverse el propio mensaje.
+///
+/// v2 (TASK-308): se agregó <see cref="Motivo"/>, opcional y al final para no romper
+/// mensajes ya encolados. Es lo que permite que el rechazo quede explicado en el historial
+/// del pedido.
 /// </summary>
 public record PedidoActualizado(
     Guid PedidoId,
     string Codigo,
     string EstadoAnterior,
     string EstadoNuevo,
-    DateTime OccurredAt
+    DateTime OccurredAt,
+    string? Motivo = null
 );
 
 /// <summary>
@@ -116,5 +124,29 @@ public record PedidoAsignado(
     Guid PedidoId,
     string Codigo,
     Guid RepartidorId,
+    DateTime OccurredAt
+);
+
+/// <summary>
+/// Publicado por Feedback cuando se registra la calificación de un pedido entregado
+/// (Nivel 1, US-004.1). Contrato v1.
+///
+/// Consumido por Orders para replicar las dos calificaciones que muestra el historial de
+/// servicios finalizados: la del domiciliario y la del restaurante. Feedback tiene la
+/// encuesta y Orders la pantalla, y ninguno le pide datos al otro en una lectura: el dato
+/// viaja por evento, como el resto de las réplicas.
+///
+/// Los dos sujetos van nombrados y no son intercambiables: en la encuesta el restaurante
+/// se califica en <c>RatingGeneralComida</c> y el domiciliario en
+/// <c>RatingServicioRepartidor</c>. Guardarlos cruzados es peor que dejarlos en null.
+/// </summary>
+public record CalificacionRegistrada(
+    Guid PedidoId,
+    string Codigo,
+    // Puede faltar: la encuesta no exige que la asignación haya sido proyectada, y el
+    // cliente califica el servicio aunque no se sepa quién lo entregó.
+    Guid? RepartidorId,
+    int CalificacionRestaurante,
+    int CalificacionDomiciliario,
     DateTime OccurredAt
 );
