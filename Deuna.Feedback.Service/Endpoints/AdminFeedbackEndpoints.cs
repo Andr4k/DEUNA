@@ -136,8 +136,10 @@ public static class AdminFeedbackEndpoints
         }
 
         // Pagina y tamano no se declaran: el resumen es del conjunto, no de la página, así que
-        // no hay nada que paginar acá.
-        var filtro = ArmarFiltro(desde, hasta, buscar: null, zona: null, calificacionMin: null, calificacionMax: null, 1, 20);
+        // no hay nada que paginar acá. Los filtros que sí llegan viajan al conjunto: son los
+        // mismos que los de la lista, y descartarlos acá —aunque la firma los declare— dejaría
+        // al resumen contando el universo mientras la tabla cuenta lo filtrado.
+        var filtro = ArmarFiltro(desde, hasta, buscar, zona, calificacionMin, calificacionMax, 1, 20);
 
         return Results.Ok(await calificaciones.ObtenerResumenAsync(filtro));
     }
