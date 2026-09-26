@@ -144,16 +144,21 @@ public class GestionUsuariosService : IGestionUsuariosService
     /// </summary>
     private static List<string> ZonasDe(Usuario usuario, TipoUsuarioPortal tipo)
     {
+        // Las dos colecciones son de TIPOS DISTINTOS (ZonaCoberturaRestaurante y
+        // ZonaCoberturaRepartidor), así que un switch que devuelva la colección cruda no
+        // tiene tipo común y no compila. Cada rama proyecta a los mismos campos —el nombre—
+        // y el resultado es una lista de nombres. Se filtra por Activo porque una zona
+        // apagada sigue asignada al perfil pero ya no cubre nada.
         var zonas = tipo switch
         {
-            TipoUsuarioPortal.RESTAURANTE => usuario.PerfilRestaurante!.ZonasCobertura,
-            TipoUsuarioPortal.REPARTIDOR => usuario.PerfilRepartidor!.ZonasCobertura,
-            _ => []
+            TipoUsuarioPortal.RESTAURANTE => usuario.PerfilRestaurante!.ZonasCobertura
+                .Where(z => z.Activo).Select(z => z.NombreZona),
+            TipoUsuarioPortal.REPARTIDOR => usuario.PerfilRepartidor!.ZonasCobertura
+                .Where(z => z.Activo).Select(z => z.NombreZona),
+            _ => Enumerable.Empty<string>()
         };
 
         return zonas
-            .Where(z => z.Activo)
-            .Select(z => z.NombreZona)
             .OrderBy(nombre => nombre, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
